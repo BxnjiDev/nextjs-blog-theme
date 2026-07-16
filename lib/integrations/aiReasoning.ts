@@ -4,6 +4,15 @@ import { z } from 'zod';
 import type { CompanyFundamentals, NewsArticle, Quote, SecFiling, Technicals } from './types';
 import { resolveAnthropicModel, type SupportedAnthropicModel } from './anthropicModel';
 
+const ExplainabilitySchema = z.object({
+  whyNow: z.string().describe('Why this action, at this time — grounded in the data given.'),
+  whyNot: z.string().describe('The strongest reason NOT to take this action — steelman the alternative.'),
+  supportingEvidence: z.string().describe('The specific data points that support this call.'),
+  contradictingEvidence: z.string().describe('The specific data points that cut against this call, if any. Say "None found in the available data" if genuinely none.'),
+  keyAssumptions: z.string().describe('What has to remain true for this call to hold up.'),
+  invalidationConditions: z.string().describe('What specific, observable event would invalidate this call.'),
+});
+
 const HoldingAnalysisSchema = z.object({
   thesis: z.string().describe('Current investment thesis in 2-4 sentences, grounded only in the data provided.'),
   thesisChanged: z
@@ -27,9 +36,13 @@ const HoldingAnalysisSchema = z.object({
     .max(10)
     .describe('1-10. Lower when fundamentals, news, or filings data is missing or thin.'),
   action: z.enum(['BUY_MORE', 'HOLD', 'REDUCE', 'SELL', 'WATCH']),
+  expectedOutcome: z.string().describe('What Atlas expects to happen if this call is right — a stated, gradeable prediction, not a hedge.'),
+  expectedTimeHorizon: z.string().describe('e.g. "3-6 months" — over what horizon the expected outcome should play out.'),
+  explainability: ExplainabilitySchema,
 });
 
 export type HoldingAnalysisOutput = z.infer<typeof HoldingAnalysisSchema>;
+export type ExplainabilityOutput = z.infer<typeof ExplainabilitySchema>;
 
 export interface HoldingAnalysisInput {
   symbol: string;
@@ -42,6 +55,9 @@ export interface HoldingAnalysisInput {
   filings: SecFiling[];
   news: NewsArticle[];
   previousRecommendation: { thesis: string; action: string; generatedAt: Date } | null;
+  /** Past recommendations/conviction/alerts for this holding plus the
+   * portfolio-wide confidence-calibration summary — see lib/domain/memory.ts. */
+  memoryContext: string;
 }
 
 const ThesisNarrativeSchema = z.object({
@@ -56,6 +72,9 @@ const ThesisNarrativeSchema = z.object({
   bearCase: z.string(),
   catalysts: z.string(),
   investmentHorizon: z.string().describe('e.g. "3-5 years" — a horizon estimate, not a prediction of a specific price or date.'),
+  whatWouldStrengthen: z.string().describe('What specific, observable evidence would increase conviction in this holding.'),
+  whatWouldWeaken: z.string().describe('What specific, observable evidence would decrease conviction in this holding.'),
+  sellConditions: z.string().describe('What specific conditions would justify selling — not vague hedging, concrete triggers.'),
   thesisChanged: z
     .boolean()
     .describe('True only if the core reasoning for owning this has materially changed vs. the previous thesis given — not for routine updates.'),
@@ -90,6 +109,9 @@ export interface ThesisNarrativeInput {
     bearCase: string;
     catalysts: string;
     investmentHorizon: string;
+    whatWouldStrengthen: string;
+    whatWouldWeaken: string;
+    sellConditions: string;
     convictionScore: number;
     lastReviewedAt: Date;
   } | null;
@@ -99,9 +121,36 @@ export interface ThesisNarrativeInput {
   memoryContext: string;
 }
 
+const CritiqueSchema = z.object({
+  lessonsLearned: z
+    .string()
+    .describe('2-4 sentences reflecting on this recommendation given the deterministic facts provided — what would you do differently, if anything.'),
+});
+
+export type CritiqueOutput = z.infer<typeof CritiqueSchema>;
+
+export interface RecommendationCritiqueInput {
+  symbol: string;
+  action: string;
+  confidenceScore: number;
+  thesisAtRecommendation: string;
+  expectedOutcome: string;
+  expectedTimeHorizon: string;
+  /** Deterministic facts only — this is a grounding input, never something Claude is asked to invent. */
+  wasCorrect: boolean | null;
+  thesisCorrect: boolean | null;
+  timingCorrect: boolean | null;
+  /** Percentage points (e.g. 12.3 = +12.3%), matching RecommendationOutcome's stored units. */
+  return90d: number | null;
+  alpha90d: number | null;
+  thesisChangedSince: string | null;
+  missingEvidence: string | null;
+}
+
 export interface AiReasoningProvider {
   analyzeHolding(input: HoldingAnalysisInput): Promise<HoldingAnalysisOutput>;
   generateThesisNarrative(input: ThesisNarrativeInput): Promise<ThesisNarrativeOutput>;
+  critiqueRecommendation(input: RecommendationCritiqueInput): Promise<CritiqueOutput>;
 }
 
 const SYSTEM_PROMPT = `You are a disciplined equity research analyst helping an individual long-term investor.
@@ -111,6 +160,9 @@ Rules you must follow:
 - Clearly separate verified data points (quote, technicals, fundamentals, filings, news) from your own inference or opinion.
 - Lower your confidence score when key data is missing or thin (e.g. no fundamentals data, zero news items, zero filings) — do not project high confidence from limited data.
 - Never recommend a trade based purely on a price move; ground the recommended action in whether the thesis, valuation, or risk has actually changed.
+- State an expectedOutcome and expectedTimeHorizon as a real, gradeable prediction — not a hedge like "it depends." This will be checked against what actually happens.
+- For explainability: whyNot should genuinely steelman the opposite call, not restate whyNow in different words. contradictingEvidence should name real data points against the call, or explicitly say none were found.
+- If historical confidence-calibration data is provided, use it to calibrate your stated confidenceScore — if a similar confidence band has historically over- or under-performed, adjust accordingly rather than ignoring that track record.
 - Be concise and evidence-driven. No hype.`;
 
 function buildUserPrompt(input: HoldingAnalysisInput): string {
@@ -163,6 +215,8 @@ function buildUserPrompt(input: HoldingAnalysisInput): string {
     lines.push('Previous recommendation: none — this is the first analysis for this holding.');
   }
 
+  lines.push(`\nAI memory (past recommendations/alerts for this holding, plus historical confidence calibration):\n${input.memoryContext}`);
+
   lines.push('\nProduce a structured analysis per the schema, following the rules above.');
   return lines.join('\n');
 }
@@ -175,7 +229,32 @@ Rules you must follow:
 - Set thesisChanged=true only when the core reason to own this has materially changed (e.g. a competitive threat materialized, a key growth driver stalled, guidance was cut) — not for routine price moves or minor news.
 - Judge confidenceChanged/riskChanged/valuationChanged/returnExpectationChanged independently and honestly; several can be true even when thesisChanged is false.
 - When nothing changed, still fill in whatChanged/whyChanged as empty strings — do not pad them with restated facts.
+- whatWouldStrengthen/whatWouldWeaken/sellConditions must be specific and observable (e.g. "gross margin falls below 40% for two consecutive quarters"), not vague hedges like "if things get worse."
 - Be concise and evidence-driven. No hype, no speculation presented as fact.`;
+
+const CRITIQUE_SYSTEM_PROMPT = `You are an institutional investment analyst reviewing your OWN past recommendation with the benefit of hindsight.
+
+Rules you must follow:
+- You are given deterministic facts (whether the call was correct, the thesis held up, timing was right, and the realized return/alpha) — treat these as ground truth, do not second-guess or recompute them.
+- Write 2-4 sentences of genuine self-critique: what evidence proved out, what didn't, and what you would look for differently next time. Avoid generic hedging ("markets are unpredictable") — be specific to this case.
+- If missingEvidence is noted, acknowledge how that gap affected the original call's reliability.
+- No hype, no excessive self-flagellation — a plain, honest retrospective.`;
+
+function buildCritiquePrompt(input: RecommendationCritiqueInput): string {
+  const lines: string[] = [];
+  lines.push(`Symbol: ${input.symbol}. Original recommendation: ${input.action} (confidence ${input.confidenceScore}/10).`);
+  lines.push(`Thesis at the time: ${input.thesisAtRecommendation}`);
+  lines.push(`Stated expected outcome: ${input.expectedOutcome} (horizon: ${input.expectedTimeHorizon})`);
+  lines.push(
+    `Deterministic grading — wasCorrect=${input.wasCorrect ?? 'n/a'}, thesisCorrect=${input.thesisCorrect ?? 'n/a'}, ` +
+      `timingCorrect=${input.timingCorrect ?? 'n/a'}, 90-day return=${input.return90d !== null ? `${input.return90d.toFixed(1)}%` : 'n/a'}, ` +
+      `90-day alpha vs. SPY=${input.alpha90d !== null ? `${input.alpha90d.toFixed(1)}pp` : 'n/a'}.`
+  );
+  if (input.thesisChangedSince) lines.push(`Thesis changed since this recommendation: ${input.thesisChangedSince}`);
+  if (input.missingEvidence) lines.push(`Data that was missing at recommendation time: ${input.missingEvidence}`);
+  lines.push('\nProduce a structured critique per the schema, following the rules above.');
+  return lines.join('\n');
+}
 
 function buildThesisPrompt(input: ThesisNarrativeInput): string {
   const lines: string[] = [];
@@ -286,6 +365,28 @@ class ClaudeAiReasoningProvider implements AiReasoningProvider {
     }
     return response.parsed_output;
   }
+
+  async critiqueRecommendation(input: RecommendationCritiqueInput): Promise<CritiqueOutput> {
+    const response = await this.client.messages.parse({
+      model: this.model,
+      max_tokens: 2048,
+      thinking: { type: 'adaptive' },
+      output_config: {
+        effort: 'medium',
+        format: zodOutputFormat(CritiqueSchema),
+      },
+      system: CRITIQUE_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildCritiquePrompt(input) }],
+    });
+
+    if (response.stop_reason === 'refusal') {
+      throw new Error('Claude declined to critique this recommendation (refusal).');
+    }
+    if (!response.parsed_output) {
+      throw new Error('Claude response did not include parseable structured output.');
+    }
+    return response.parsed_output;
+  }
 }
 
 /**
@@ -322,6 +423,16 @@ class HeuristicAiReasoningProvider implements AiReasoningProvider {
       institutionalSentiment: 'Not available — no institutional-ownership data source configured.',
       confidenceScore: 2,
       action: 'WATCH',
+      expectedOutcome: 'Not stated — no AI reasoning provider configured.',
+      expectedTimeHorizon: 'Not stated — no AI reasoning provider configured.',
+      explainability: {
+        whyNow: 'Not assessed — configure ANTHROPIC_API_KEY for real reasoning.',
+        whyNot: 'Not assessed.',
+        supportingEvidence: 'Not assessed.',
+        contradictingEvidence: 'Not assessed.',
+        keyAssumptions: 'Not assessed.',
+        invalidationConditions: 'Not assessed.',
+      },
     };
   }
 
@@ -340,6 +451,9 @@ class HeuristicAiReasoningProvider implements AiReasoningProvider {
         bearCase: input.previousThesis.bearCase,
         catalysts: input.previousThesis.catalysts,
         investmentHorizon: input.previousThesis.investmentHorizon,
+        whatWouldStrengthen: input.previousThesis.whatWouldStrengthen,
+        whatWouldWeaken: input.previousThesis.whatWouldWeaken,
+        sellConditions: input.previousThesis.sellConditions,
         thesisChanged: false,
         confidenceChanged: false,
         riskChanged: false,
@@ -360,6 +474,9 @@ class HeuristicAiReasoningProvider implements AiReasoningProvider {
       bearCase: unavailableNote,
       catalysts: unavailableNote,
       investmentHorizon: 'Unknown — no AI reasoning provider configured.',
+      whatWouldStrengthen: unavailableNote,
+      whatWouldWeaken: unavailableNote,
+      sellConditions: unavailableNote,
       thesisChanged: false,
       confidenceChanged: false,
       riskChanged: false,
@@ -367,6 +484,12 @@ class HeuristicAiReasoningProvider implements AiReasoningProvider {
       returnExpectationChanged: false,
       whatChanged: '',
       whyChanged: '',
+    };
+  }
+
+  async critiqueRecommendation(input: RecommendationCritiqueInput): Promise<CritiqueOutput> {
+    return {
+      lessonsLearned: `Not available — no AI reasoning provider configured (set ANTHROPIC_API_KEY). Deterministic grading only: wasCorrect=${input.wasCorrect ?? 'n/a'}, thesisCorrect=${input.thesisCorrect ?? 'n/a'}, timingCorrect=${input.timingCorrect ?? 'n/a'}.`,
     };
   }
 }
@@ -397,6 +520,15 @@ class FallbackAiReasoningProvider implements AiReasoningProvider {
     } catch (err) {
       console.error(`AI reasoning provider failed for ${input.symbol} thesis review; falling back to heuristic summary:`, err);
       return this.heuristic.generateThesisNarrative(input);
+    }
+  }
+
+  async critiqueRecommendation(input: RecommendationCritiqueInput): Promise<CritiqueOutput> {
+    try {
+      return await this.real.critiqueRecommendation(input);
+    } catch (err) {
+      console.error(`AI reasoning provider failed for ${input.symbol} critique; falling back to heuristic summary:`, err);
+      return this.heuristic.critiqueRecommendation(input);
     }
   }
 }

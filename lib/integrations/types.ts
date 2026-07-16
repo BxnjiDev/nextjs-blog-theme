@@ -119,3 +119,89 @@ export interface SecFiling {
 export interface SecFilingsProvider {
   getRecentFilings(symbol: string, limit?: number): Promise<SecFiling[]>;
 }
+
+// ---------------------------------------------------------------------------
+// Fundamentals history (Phase 3): financial statements, valuation multiples,
+// ownership, and a forward earnings calendar. Every field is independently
+// nullable — a provider that can't determine one metric returns null for
+// just that field rather than withholding the whole record.
+// ---------------------------------------------------------------------------
+
+export type StatementPeriod = 'ANNUAL' | 'QUARTERLY';
+
+export interface FinancialStatementData {
+  symbol: string;
+  periodType: StatementPeriod;
+  fiscalYear: number;
+  fiscalPeriod: string; // "FY" for annual, "Q1".."Q4" for quarterly
+  reportDate: Date;
+  income: Record<string, number | null>;
+  balance: Record<string, number | null>;
+  cashFlow: Record<string, number | null>;
+  metrics: {
+    revenue: number | null;
+    revenueGrowth: number | null; // YoY, decimal (0.15 = +15%)
+    grossMargin: number | null;
+    operatingMargin: number | null;
+    netMargin: number | null;
+    freeCashFlow: number | null;
+    eps: number | null;
+    epsGrowth: number | null;
+    roe: number | null;
+    roic: number | null;
+    debtToEquity: number | null;
+    currentRatio: number | null;
+    cash: number | null;
+    totalDebt: number | null;
+  };
+  quality: DataQuality;
+}
+
+export interface ValuationMetrics {
+  symbol: string;
+  peRatio: number | null;
+  forwardPe: number | null;
+  peg: number | null;
+  evToEbitda: number | null;
+  evToSales: number | null;
+  priceToBook: number | null;
+  priceToFcf: number | null;
+  asOf: Date;
+  quality: DataQuality;
+}
+
+export interface OwnershipData {
+  symbol: string;
+  insiderOwnershipPct: number | null;
+  institutionalOwnershipPct: number | null;
+  sharesOutstanding: number | null;
+  /** Negative = net buybacks, positive = net dilution, vs. the prior snapshot. */
+  sharesOutstandingChangePct: number | null;
+  dividendPerShare: number | null;
+  dividendYield: number | null;
+  asOf: Date;
+  quality: DataQuality;
+}
+
+export interface EarningsEventData {
+  symbol: string;
+  fiscalYear: number;
+  fiscalPeriod: string; // "Q1".."Q4"
+  reportDate: Date;
+  isEstimate: boolean;
+  epsEstimate: number | null;
+  epsActual: number | null;
+  revenueEstimate: number | null;
+  revenueActual: number | null;
+  guidanceNote: string | null;
+  callDate: Date | null;
+}
+
+export interface FundamentalsProvider {
+  /** Historical statement periods, newest first. */
+  getFinancialStatements(symbol: string, periods?: number): Promise<FinancialStatementData[]>;
+  getValuationMetrics(symbol: string): Promise<ValuationMetrics | null>;
+  getOwnership(symbol: string): Promise<OwnershipData | null>;
+  /** Upcoming + recent historical earnings events, chronological. */
+  getEarningsCalendar(symbol: string): Promise<EarningsEventData[]>;
+}

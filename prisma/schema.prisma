@@ -74,6 +74,29 @@ enum AlertType {
   MAJOR_NEGATIVE_NEWS
   UPCOMING_EARNINGS
   STALE_DATA
+  GUIDANCE_CHANGE
+}
+
+enum StatementPeriodType {
+  ANNUAL
+  QUARTERLY
+}
+
+enum NotificationChannelType {
+  EMAIL
+  WEBHOOK
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum PatternConfidence {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum ThesisChangeType {
@@ -222,6 +245,15 @@ model Recommendation {
   institutionalSentiment String?
   confidenceScore        Int // 1-10
   action                 RecommendedAction
+  /// What Atlas expects to happen and over what horizon — captured at
+  /// generation time so the outcome-tracking/learning job has a stated
+  /// prediction to grade against, not a retrofitted one.
+  expectedOutcome        String                 @default("Not stated.")
+  expectedTimeHorizon    String                 @default("Not stated.")
+  /// Explainability: why now / why not / supporting & contradicting
+  /// evidence / key assumptions / what would invalidate this call — see
+  /// lib/integrations/aiReasoning.ts's ExplainabilitySchema.
+  explainability         Json?
   /// Per-source freshness/quality metadata captured at generation time
   /// (quote/fundamentals asOf + quality, filing count, news count) — lets
   /// the dashboard show exactly how current an analysis is.
@@ -334,16 +366,17 @@ model NewsItem {
 /// insert-if-not-exists on that key instead of re-alerting the same event
 /// every time the job runs.
 model Alert {
-  id              String        @id @default(cuid())
+  id              String          @id @default(cuid())
   type            AlertType
-  severity        AlertSeverity @default(INFO)
+  severity        AlertSeverity   @default(INFO)
   symbol          String?
   message         String
   evidence        String?
   confidenceScore Int // 1-10
-  dedupeKey       String?       @unique
-  createdAt       DateTime      @default(now())
+  dedupeKey       String?         @unique
+  createdAt       DateTime        @default(now())
   acknowledgedAt  DateTime?
+  deliveries      AlertDelivery[]
 
   @@index([createdAt])
 }
@@ -405,12 +438,20 @@ model Thesis {
   bearCase              String
   catalysts             String
   investmentHorizon     String
+  /// "Why I Own This" — what would strengthen/weaken the thesis, and what
+  /// would justify selling. Reviewed alongside the rest of the narrative
+  /// (lib/jobs/generateThesis.ts), so these evolve the same way the thesis
+  /// itself does rather than being fixed at inception.
+  whatWouldStrengthen   String                 @default("Not yet assessed.")
+  whatWouldWeaken       String                 @default("Not yet assessed.")
+  sellConditions        String                 @default("Not yet assessed.")
   /// 0-100, mirrors the latest ConvictionAssessment.overallScore.
   convictionScore       Int
   establishedAt         DateTime               @default(now())
   lastReviewedAt        DateTime               @default(now())
   changeEvents          ThesisChangeEvent[]
   convictionAssessments ConvictionAssessment[]
+  accuracyScores        ThesisAccuracyScore[]
 
   @@index([symbol])
 }
@@ -541,6 +582,261 @@ model RecommendationOutcome {
   alpha180d             Float?
   alpha365d             Float?
   lastEvaluatedAt       DateTime          @default(now())
+  /// --- Recommendation Learning Engine (Phase 3) ---
+  /// A single retrospective critique pass, written once enough time has
+  /// elapsed (see lib/jobs/evaluateRecommendations.ts) and then left
+  /// alone — Atlas grades a call exactly once per elapsed window it
+  /// evaluates, it does not keep re-litigating the same recommendation.
+  wasCorrect            Boolean?
+  thesisCorrect         Boolean?
+  timingCorrect         Boolean?
+  assumptionsValidated  Json?
+  assumptionsFailed     Json?
+  missingEvidence       String?
+  lessonsLearned        String?
+  criticalReviewedAt    DateTime?
 
   @@index([symbol])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3A: institutional data foundation — fundamentals history, valuation
+// history, ownership history, and a real forward earnings calendar, all from
+// a connected fundamentals vendor (Financial Modeling Prep). Every field is
+// nullable and independently sourced; nothing here is ever back-filled with
+// a guess when the vendor doesn't return a value.
+// ---------------------------------------------------------------------------
+
+/// One reported (or restated) financial-statement period for a symbol.
+/// Raw statement line items are kept as JSON (income/balance/cashFlow) for
+/// completeness, while the metrics the conviction/health engines actually
+/// consume are promoted to typed columns so trend queries don't need to
+/// parse JSON. Upserted by its natural key — a restatement updates the same
+/// row rather than creating a duplicate period.
+model FundamentalSnapshot {
+  id              String              @id @default(cuid())
+  symbol          String
+  periodType      StatementPeriodType
+  fiscalYear      Int
+  fiscalPeriod    String // "FY" for annual, "Q1".."Q4" for quarterly
+  reportDate      DateTime
+  income          Json
+  balance         Json
+  cashFlow        Json
+  revenue         Float?
+  revenueGrowth   Float? // YoY, decimal (0.15 = +15%)
+  grossMargin     Float?
+  operatingMargin Float?
+  netMargin       Float?
+  freeCashFlow    Float?
+  eps             Float?
+  epsGrowth       Float?
+  roe             Float?
+  roic            Float?
+  debtToEquity    Float?
+  currentRatio    Float?
+  cash            Float?
+  totalDebt       Float?
+  quality         String              @default("mock")
+  source          String              @default("mock")
+  createdAt       DateTime            @default(now())
+
+  @@unique([symbol, periodType, fiscalYear, fiscalPeriod])
+  @@index([symbol, reportDate])
+}
+
+/// Point-in-time valuation multiples — appended on a freshness window (not
+/// upserted) since these move with price, unlike statement data.
+model ValuationSnapshot {
+  id          String   @id @default(cuid())
+  symbol      String
+  peRatio     Float?
+  forwardPe   Float?
+  peg         Float?
+  evToEbitda  Float?
+  evToSales   Float?
+  priceToBook Float?
+  priceToFcf  Float?
+  quality     String   @default("mock")
+  asOf        DateTime @default(now())
+
+  @@index([symbol, asOf])
+}
+
+/// Ownership/share-count snapshot — insider %, institutional %, share count
+/// and its change (negative = buybacks, positive = dilution), dividend data.
+model OwnershipSnapshot {
+  id                         String   @id @default(cuid())
+  symbol                     String
+  insiderOwnershipPct        Float?
+  institutionalOwnershipPct  Float?
+  sharesOutstanding          Float?
+  sharesOutstandingChangePct Float?
+  dividendPerShare           Float?
+  dividendYield              Float?
+  quality                    String   @default("mock")
+  asOf                       DateTime @default(now())
+
+  @@index([symbol, asOf])
+}
+
+/// A single fiscal-period earnings event — starts as an estimate
+/// (isEstimate=true) and is updated in place as the actual report lands.
+/// `estimateRevisions` appends an entry every time a re-fetch finds the
+/// street estimate has moved, so revision history is preserved even though
+/// the row itself is mutable (this is the one place in the schema where
+/// "update in place" is the correct model, not append-only — an earnings
+/// date is one real-world event, not a time series).
+model EarningsEvent {
+  id                 String    @id @default(cuid())
+  symbol             String
+  fiscalYear         Int
+  fiscalPeriod       String
+  reportDate         DateTime
+  isEstimate         Boolean   @default(true)
+  epsEstimate        Float?
+  epsActual          Float?
+  epsSurprisePct     Float?
+  revenueEstimate    Float?
+  revenueActual      Float?
+  revenueSurprisePct Float?
+  guidanceNote       String?
+  callDate           DateTime?
+  estimateRevisions  Json      @default("[]")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([symbol, fiscalYear, fiscalPeriod])
+  @@index([symbol, reportDate])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3A: alert delivery layer. The alert engine (lib/domain/alerts.ts,
+// createAlertIfNew) is completely unaware this exists — delivery is a
+// separate sweep over Alert rows, so adding a channel type later (Slack,
+// Discord, SMS, mobile push) never touches alert generation.
+// ---------------------------------------------------------------------------
+
+/// A configured delivery channel. `config` shape depends on `type`: EMAIL
+/// stores {to}, WEBHOOK stores {url, secret?}. One row per type for now
+/// (see lib/integrations/notifications.ts) — supporting several channels of
+/// the same type is a trivial follow-up (drop the unique constraint).
+model NotificationChannel {
+  id        String                  @id @default(cuid())
+  type      NotificationChannelType @unique
+  config    Json
+  enabled   Boolean                 @default(true)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  deliveries AlertDelivery[]
+}
+
+/// One delivery attempt record per (alert, channel) — the unique constraint
+/// is what makes the delivery job idempotent (create-and-catch-P2002, same
+/// pattern as everywhere else), and failed deliveries are retried in place
+/// (status flips back to PENDING/FAILED, attempts increments) rather than
+/// creating a second row for the same alert+channel pair.
+model AlertDelivery {
+  id          String              @id @default(cuid())
+  alertId     String
+  alert       Alert               @relation(fields: [alertId], references: [id])
+  channelId   String
+  channel     NotificationChannel @relation(fields: [channelId], references: [id])
+  status      DeliveryStatus      @default(PENDING)
+  attempts    Int                 @default(0)
+  lastError   String?
+  deliveredAt DateTime?
+  createdAt   DateTime            @default(now())
+
+  @@unique([alertId, channelId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3B: continuous learning. Every score here is a deterministic
+// calculation over Recommendation/RecommendationOutcome/ConvictionAssessment/
+// Thesis history — the retrospective judgment calls (wasCorrect etc., above
+// on RecommendationOutcome) are the deterministic inputs; these models
+// aggregate them. Small-sample results are labeled, never dressed up as
+// statistically meaningful when they aren't.
+// ---------------------------------------------------------------------------
+
+/// Append-only calibration run: buckets recommendations by their stated
+/// confidenceScore (1-10, treated as decile confidence bands) and compares
+/// against actual win rate in that band. overallBrierScore is a real
+/// statistical calibration metric (mean squared error of predicted
+/// probability vs. binary outcome) — lower is better calibrated.
+model ConfidenceCalibration {
+  id                String   @id @default(cuid())
+  buckets           Json
+  overallBrierScore Float?
+  sampleSize        Int
+  methodology       Json
+  generatedAt       DateTime @default(now())
+
+  @@index([generatedAt])
+}
+
+/// Retrospective accuracy scoring for a thesis — how well its narrative
+/// held up against what actually happened, per component. Components with
+/// no deterministic formula (e.g. "were the stated catalysts achieved") are
+/// left null and documented rather than estimated from free text.
+model ThesisAccuracyScore {
+  id                   String   @id @default(cuid())
+  thesisId             String
+  thesis               Thesis   @relation(fields: [thesisId], references: [id])
+  symbol               String
+  revenueAccuracy      Int?
+  marginAccuracy       Int?
+  catalystsAchievedPct Float?
+  risksRealizedPct     Float?
+  valuationAccuracy    Int?
+  timingAccuracy       Int?
+  overallScore         Int
+  methodology          Json
+  generatedAt          DateTime @default(now())
+
+  @@index([thesisId, generatedAt])
+  @@index([symbol, generatedAt])
+}
+
+/// Permanent, append-only scorecard snapshot — Atlas measuring its own
+/// effectiveness. A time series (like RiskAssessment/PortfolioHealthAssessment)
+/// so the scorecard itself can show a trend, not just a single number.
+model RecommendationScorecard {
+  id                   String   @id @default(cuid())
+  totalRecommendations Int
+  buyCount             Int
+  holdCount            Int
+  reduceCount          Int
+  sellCount            Int
+  watchCount           Int
+  winRatePct           Float?
+  falsePositives       Int
+  falseNegatives       Int
+  alphaVsSpyAvgPct     Float?
+  avgHoldingPeriodDays Float?
+  methodology          Json
+  generatedAt          DateTime @default(now())
+
+  @@index([generatedAt])
+}
+
+/// A statistically-gated pattern found across historical recommendations
+/// (e.g. "holdings in sector X outperformed SPY by Y pp, n=Z"). Only
+/// surfaced when sampleSize clears a minimum threshold — see
+/// lib/jobs/detectPatterns.ts — so this never asserts a pattern from a
+/// handful of coincidental data points.
+model RecommendationPattern {
+  id                String            @id @default(cuid())
+  label             String
+  description       String
+  sampleSize        Int
+  supportingSymbols Json
+  winRatePct        Float?
+  confidenceLevel   PatternConfidence
+  methodology       Json
+  generatedAt       DateTime          @default(now())
+
+  @@index([generatedAt])
 }

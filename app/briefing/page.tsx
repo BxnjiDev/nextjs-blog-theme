@@ -39,7 +39,11 @@ interface PortfolioNewsItemShape {
 
 interface MarketRecapShape {
   portfolioNews: PortfolioNewsItemShape[];
-  upcomingEvents: Array<{ symbol: string; mostRecentFiling: { formType: string; filedAt: string; url: string } | null }>;
+  upcomingEvents: Array<{
+    symbol: string;
+    mostRecentFiling: { formType: string; filedAt: string; url: string } | null;
+    nextEarnings: { reportDate: string; daysAway: number; epsEstimate: number | null; fiscalPeriod: string; fiscalYear: number } | null;
+  }>;
   notes: string[];
 }
 
@@ -194,6 +198,26 @@ export default async function BriefingPage() {
                     ))}
                   </ul>
                 )}
+              </section>
+
+              <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
+                <h2 className="mb-3 font-semibold">Upcoming earnings &amp; events</h2>
+                <div className="space-y-2 text-sm">
+                  {recap.upcomingEvents.map((e) => (
+                    <div key={e.symbol} className="flex items-center justify-between">
+                      <Link href={`/intelligence/${e.symbol}`} className="font-medium underline">
+                        {e.symbol}
+                      </Link>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {e.nextEarnings
+                          ? `Reports ${e.nextEarnings.fiscalPeriod} FY${e.nextEarnings.fiscalYear} in ${e.nextEarnings.daysAway}d (${new Date(e.nextEarnings.reportDate).toLocaleDateString()})${e.nextEarnings.epsEstimate !== null ? `, EPS est. ${e.nextEarnings.epsEstimate.toFixed(2)}` : ''}`
+                          : e.mostRecentFiling
+                            ? `No earnings-calendar entry — last filing ${e.mostRecentFiling.formType} on ${new Date(e.mostRecentFiling.filedAt).toLocaleDateString()}`
+                            : 'No calendar or filing data available.'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </section>
 
               <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">

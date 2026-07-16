@@ -1,11 +1,13 @@
 import type { HoldingView } from './portfolio';
 import type { Trend } from '@/lib/integrations';
+import { linearRiskScore } from './risk';
 
 export interface HealthHoldingInput {
   view: HoldingView;
   trend: Trend | null;
   convictionScore: number | null; // latest ConvictionAssessment.overallScore, if any
   valuationScore: number | null; // latest ConvictionAssessment.valuation, if any
+  revenueGrowth: number | null; // latest FundamentalSnapshot.revenueGrowth (YoY, decimal), if ingested
 }
 
 export interface RiskSnapshotForHealth {
@@ -84,22 +86,38 @@ export function computePortfolioHealth(input: PortfolioHealthInput): PortfolioHe
         : 'No conviction assessments on record yet — neutral default.',
   };
 
-  // --- Growth: technical-momentum proxy (fraction of value in an UP trend). ---
-  let upWeight = 0;
-  let trendWeightTotal = 0;
+  // --- Growth: real position-weighted revenue growth when ingested, else a technical-momentum proxy. ---
+  let revGrowthSum = 0;
+  let revGrowthWeightTotal = 0;
   for (const h of input.holdings) {
     const weight = input.totalValue > 0 ? h.view.marketValue / input.totalValue : 0;
-    if (h.trend) {
-      trendWeightTotal += weight;
-      if (h.trend === 'UP') upWeight += weight;
+    if (h.revenueGrowth !== null) {
+      revGrowthSum += linearRiskScore(h.revenueGrowth * 100, -10, 25) * weight;
+      revGrowthWeightTotal += weight;
     }
   }
-  const growthScoreValue = trendWeightTotal > 0 ? clamp((upWeight / trendWeightTotal) * 100) : 50;
-  const growthScore: HealthComponent = {
-    score: growthScoreValue,
-    explanation:
-      'Technical-momentum proxy: share of portfolio value in holdings currently trending UP. Not a fundamental revenue-growth measure — no such data source is connected.',
-  };
+  let growthScore: HealthComponent;
+  if (revGrowthWeightTotal > 0) {
+    growthScore = {
+      score: clamp(revGrowthSum / revGrowthWeightTotal),
+      explanation: `Position-weighted YoY revenue growth across holdings with fundamentals-history data ingested (${(revGrowthWeightTotal * 100).toFixed(0)}% of portfolio value covered).`,
+    };
+  } else {
+    let upWeight = 0;
+    let trendWeightTotal = 0;
+    for (const h of input.holdings) {
+      const weight = input.totalValue > 0 ? h.view.marketValue / input.totalValue : 0;
+      if (h.trend) {
+        trendWeightTotal += weight;
+        if (h.trend === 'UP') upWeight += weight;
+      }
+    }
+    growthScore = {
+      score: trendWeightTotal > 0 ? clamp((upWeight / trendWeightTotal) * 100) : 50,
+      explanation:
+        'Technical-momentum proxy: share of portfolio value in holdings currently trending UP. No fundamentals-history data ingested yet for any holding.',
+    };
+  }
 
   // --- Risk: inverse of the latest portfolio risk assessment. ---
   const riskScoreValue = input.risk ? clamp(100 - input.risk.overallScore) : 50;

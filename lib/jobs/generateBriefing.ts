@@ -120,11 +120,23 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
 
   const upcomingEvents = await Promise.all(
     account.holdings.map(async (h) => {
-      const filings = await secFilingsProvider.getRecentFilings(h.symbol, 1);
+      const [filings, nextEarnings] = await Promise.all([
+        secFilingsProvider.getRecentFilings(h.symbol, 1),
+        prisma.earningsEvent.findFirst({ where: { symbol: h.symbol, isEstimate: true }, orderBy: { reportDate: 'asc' } }),
+      ]);
       return {
         symbol: h.symbol,
         mostRecentFiling: filings[0]
           ? { formType: filings[0].formType, filedAt: filings[0].filedAt.toISOString(), url: filings[0].url }
+          : null,
+        nextEarnings: nextEarnings
+          ? {
+              reportDate: nextEarnings.reportDate.toISOString(),
+              daysAway: Math.round((nextEarnings.reportDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+              epsEstimate: nextEarnings.epsEstimate,
+              fiscalPeriod: nextEarnings.fiscalPeriod,
+              fiscalYear: nextEarnings.fiscalYear,
+            }
           : null,
       };
     })
@@ -135,7 +147,6 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
     upcomingEvents,
     notes: [
       'No macro/economic data sources (Federal Reserve, CPI, rates, oil, gold, Bitcoin) are connected yet.',
-      'No forward-looking earnings calendar is connected; showing the most recent SEC filing per holding as the closest available signal instead.',
     ],
   };
 

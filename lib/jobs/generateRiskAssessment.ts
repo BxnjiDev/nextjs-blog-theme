@@ -74,15 +74,19 @@ export async function runRiskAssessmentJob(): Promise<RiskJobResult> {
 
   const holdings: RiskHoldingInput[] = await Promise.all(
     overview.holdings.map(async (view) => {
-      const [history, fundamentals, filings, negativeNews] = await Promise.all([
+      const [history, fundamentals, filings, negativeNews, nextEarnings] = await Promise.all([
         marketDataProvider.getHistoricalDaily(view.symbol, 60),
         marketDataProvider.getFundamentals(view.symbol),
         secFilingsProvider.getRecentFilings(view.symbol, 1),
         getStoredNews({ symbol: view.symbol, sinceHours: 24 * 7 }),
+        prisma.earningsEvent.findFirst({ where: { symbol: view.symbol, isEstimate: true }, orderBy: { reportDate: 'asc' } }),
       ]);
 
       const daysSinceLastFiling = filings[0]
         ? Math.round((Date.now() - filings[0].filedAt.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const daysToNextEarnings = nextEarnings
+        ? Math.round((nextEarnings.reportDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         : null;
 
       const negativeNewsCritical = negativeNews.filter(
@@ -92,7 +96,7 @@ export async function runRiskAssessmentJob(): Promise<RiskJobResult> {
         (n) => n.materialityLevel === 'HIGH' && n.sentiment !== null && n.sentiment < 0
       ).length;
 
-      return { view, history, fundamentals, daysSinceLastFiling, negativeNewsCritical, negativeNewsHigh };
+      return { view, history, fundamentals, daysSinceLastFiling, daysToNextEarnings, negativeNewsCritical, negativeNewsHigh };
     })
   );
 
@@ -169,22 +173,17 @@ export async function runRiskAssessmentJob(): Promise<RiskJobResult> {
     },
   });
 
-  await raiseRiskAlerts(result, previous?.overallScore ?? null, overview.holdings);
+  await raiseRiskAlerts(result, previous?.overallScore ?? null);
 
   return { skipped: false, overallScore: result.overallScore, previousScore: previous?.overallScore ?? null };
 }
 
 /** No noise on routine price moves — every alert here is gated on a
  * deliberately conservative threshold, and deduped per-day via dedupeKey. */
-async function raiseRiskAlerts(
-  result: RiskResult,
-  previousOverallScore: number | null,
-  holdings: Array<{ symbol: string; marketValue: number }>
-): Promise<void> {
+async function raiseRiskAlerts(result: RiskResult, previousOverallScore: number | null): Promise<void> {
   const day = todayKey();
   const concentration = result.inputs.concentration as { top1Pct: number } | undefined;
   const drawdown = result.inputs.drawdown as { maxDrawdownPct: number | null } | undefined;
-  const earnings = result.inputs.earnings as { perHoldingDaysSinceLastFiling: Record<string, number | null> } | undefined;
 
   if (concentration && concentration.top1Pct >= 30) {
     await createAlertIfNew({
@@ -227,23 +226,9 @@ async function raiseRiskAlerts(
     });
   }
 
-  if (earnings) {
-    for (const h of holdings) {
-      const weight = holdings.reduce((s, x) => s + x.marketValue, 0);
-      const pct = weight > 0 ? (h.marketValue / weight) * 100 : 0;
-      const days = earnings.perHoldingDaysSinceLastFiling[h.symbol] ?? null;
-      if (pct >= 15 && days !== null && days >= 85) {
-        await createAlertIfNew({
-          type: 'UPCOMING_EARNINGS',
-          severity: 'INFO',
-          symbol: h.symbol,
-          message: `${h.symbol} (${pct.toFixed(1)}% of portfolio) is ${days} days past its last filing — likely approaching its next quarterly report.`,
-          confidenceScore: 5,
-          dedupeKey: `upcoming-earnings:${h.symbol}:${day}`,
-        });
-      }
-    }
-  }
+  // UPCOMING_EARNINGS is raised from the real forward calendar in
+  // lib/jobs/ingestEarnings.ts (a specific report date, not a filing-cadence
+  // proxy) — not duplicated here.
 }
 
 function buildRiseEvidence(result: RiskResult): string {

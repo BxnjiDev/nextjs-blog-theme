@@ -38,15 +38,17 @@ export async function runPortfolioHealthJob(): Promise<HealthJobResult> {
 
   const holdings: HealthHoldingInput[] = await Promise.all(
     overview.holdings.map(async (view) => {
-      const [technicals, latestConviction] = await Promise.all([
+      const [technicals, latestConviction, latestFundamentals] = await Promise.all([
         marketDataProvider.getTechnicals(view.symbol),
         prisma.convictionAssessment.findFirst({ where: { symbol: view.symbol }, orderBy: { generatedAt: 'desc' } }),
+        prisma.fundamentalSnapshot.findFirst({ where: { symbol: view.symbol, periodType: 'QUARTERLY' }, orderBy: { reportDate: 'desc' } }),
       ]);
       return {
         view,
         trend: technicals.trend,
         convictionScore: latestConviction?.overallScore ?? null,
         valuationScore: latestConviction?.valuation ?? null,
+        revenueGrowth: latestFundamentals?.revenueGrowth ?? null,
       };
     })
   );

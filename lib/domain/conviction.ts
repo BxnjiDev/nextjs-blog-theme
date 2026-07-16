@@ -7,11 +7,16 @@ import { linearRiskScore, annualizedVolatility, computeBeta, sectorOf, matchesAn
  * OR null when no data source supports scoring it — never a guessed
  * number. Qualitative categories (moat, AI positioning, management
  * execution, industry leadership, product innovation) have no deterministic
- * formula given the data this app has access to (no analyst estimates, no
- * peer universe, no management-quality data source) and are intentionally
- * left null here; Claude may still write a NARRATIVE about them (stored on
- * Thesis.competitiveAdvantages etc.), but the numeric score is not
- * fabricated to fill the gap.
+ * formula given the data this app has access to (no peer universe, no
+ * management-quality data source, no durable-moat metric) and are
+ * intentionally left null here; Claude may still write a NARRATIVE about
+ * them (stored on Thesis.competitiveAdvantages etc.), but the numeric score
+ * is not fabricated to fill the gap. financialStrength, revenueGrowth,
+ * profitability, and balanceSheet are scored from real fundamentals-history
+ * data (Financial Modeling Prep, via lib/jobs/ingestFundamentals.ts) when
+ * available, falling back to a cruder proxy from the market-data provider's
+ * point-in-time fundamentals when the richer history hasn't been ingested
+ * yet — never estimated beyond what one of those two sources supports.
  */
 
 export interface ConvictionCategoryResult {
@@ -20,12 +25,41 @@ export interface ConvictionCategoryResult {
   explanation: string;
 }
 
+/** Newest-first slice of FundamentalSnapshot rows for one symbol. */
+export interface FundamentalHistoryPoint {
+  fiscalYear: number;
+  fiscalPeriod: string;
+  reportDate: Date;
+  revenue: number | null;
+  revenueGrowth: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  freeCashFlow: number | null;
+  eps: number | null;
+  epsGrowth: number | null;
+  roe: number | null;
+  roic: number | null;
+  debtToEquity: number | null;
+  currentRatio: number | null;
+  cash: number | null;
+  totalDebt: number | null;
+}
+
 export interface ConvictionInput {
   symbol: string;
   fundamentals: CompanyFundamentals | null;
+  /** Newest-first quarterly fundamentals history, if ingested. Empty array
+   * when the fundamentals-ingestion job hasn't run for this symbol yet. */
+  fundamentalHistory: FundamentalHistoryPoint[];
   history: HistoricalPricePoint[]; // ~60 sessions
   sp500History: HistoricalPricePoint[];
   sector: string | null;
+  /** From the real earnings calendar, when available — folded into
+   * executionRisk as a near-term-uncertainty modifier (there's no separate
+   * "earnings risk" category among the 13, so it's not double-counted
+   * elsewhere in this engine). */
+  daysToNextEarnings: number | null;
 }
 
 export interface ConvictionResult {
@@ -72,11 +106,29 @@ const unavailable = (why: string): ConvictionCategoryResult => ({ score: null, d
 
 export function computeConviction(input: ConvictionInput): ConvictionResult {
   const f = input.fundamentals;
+  const latest = input.fundamentalHistory[0] ?? null;
 
-  // --- Financial strength: crude proxy from profitability + shareholder
-  // returns + size, since no debt/cash-flow data source is connected. ---
+  // --- Financial strength: real if fundamentals history is available
+  // (ROE, debt/equity, cash vs. debt), else the old crude proxy. ---
   let financialStrength: ConvictionCategoryResult;
-  if (f) {
+  if (latest && (latest.roe !== null || latest.debtToEquity !== null || latest.cash !== null)) {
+    const roeScore = latest.roe !== null ? linearRiskScore(latest.roe * 100, -5, 30) : null;
+    const leverageScore = latest.debtToEquity !== null ? 100 - linearRiskScore(latest.debtToEquity, 0, 2) : null;
+    const cashVsDebtScore =
+      latest.cash !== null && latest.totalDebt !== null && latest.totalDebt > 0
+        ? linearRiskScore(latest.cash / latest.totalDebt, 0, 1.5)
+        : null;
+    const parts = [roeScore, leverageScore, cashVsDebtScore].filter((v): v is number => v !== null);
+    const score = parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : 50;
+    financialStrength = {
+      score,
+      dataAvailable: true,
+      explanation:
+        `Blend of ROE (${latest.roe !== null ? `${(latest.roe * 100).toFixed(1)}%` : 'n/a'}), debt/equity ` +
+        `(${latest.debtToEquity !== null ? latest.debtToEquity.toFixed(2) : 'n/a'}), and cash-vs-debt coverage ` +
+        `(${latest.cash !== null && latest.totalDebt ? (latest.cash / latest.totalDebt).toFixed(2) : 'n/a'}x) from the latest reported quarter.`,
+    };
+  } else if (f) {
     let score = 50;
     if (f.eps !== null) score += f.eps > 0 ? 15 : -15;
     if (f.dividendYield !== null && f.dividendYield > 0) score += 10;
@@ -88,32 +140,64 @@ export function computeConviction(input: ConvictionInput): ConvictionResult {
     financialStrength = {
       score,
       dataAvailable: true,
-      explanation: 'Proxy from EPS sign, dividend payment, and market-cap size — no debt/cash-flow data source connected for a fuller balance-sheet read.',
+      explanation: 'Proxy from EPS sign, dividend payment, and market-cap size — fundamentals-history data (ROE/debt/cash) has not been ingested yet for this symbol.',
     };
   } else {
     financialStrength = unavailable('No fundamentals data available for this symbol.');
   }
 
-  // --- Revenue growth: no data source connected at all. ---
-  const revenueGrowth = unavailable('No revenue-history data source is connected; cannot compute growth deterministically.');
+  // --- Revenue growth: from ingested fundamentals history (YoY, most recent quarter). ---
+  let revenueGrowth: ConvictionCategoryResult;
+  if (latest?.revenueGrowth !== null && latest?.revenueGrowth !== undefined) {
+    revenueGrowth = {
+      score: linearRiskScore(latest.revenueGrowth * 100, -10, 25),
+      dataAvailable: true,
+      explanation: `Most recent quarter's YoY revenue growth was ${(latest.revenueGrowth * 100).toFixed(1)}% (fiscal ${latest.fiscalYear} ${latest.fiscalPeriod}).`,
+    };
+  } else {
+    revenueGrowth = unavailable(
+      input.fundamentalHistory.length > 0
+        ? 'Fundamentals history exists but revenue growth could not be computed (needs a matching quarter 4 periods back).'
+        : 'No fundamentals-history data ingested yet for this symbol; cannot compute growth deterministically.'
+    );
+  }
 
-  // --- Profitability: EPS yield (eps / price) as a crude proxy. ---
+  // --- Profitability: real margins if available, else EPS-yield proxy. ---
   let profitability: ConvictionCategoryResult;
   const price = input.history[0]?.close ?? null;
-  if (f?.eps !== null && f?.eps !== undefined && price && price > 0) {
+  if (latest?.netMargin !== null && latest?.netMargin !== undefined) {
+    profitability = {
+      score: linearRiskScore(latest.netMargin * 100, -5, 25),
+      dataAvailable: true,
+      explanation: `Net margin of ${(latest.netMargin * 100).toFixed(1)}% (fiscal ${latest.fiscalYear} ${latest.fiscalPeriod}), gross margin ${latest.grossMargin !== null ? `${(latest.grossMargin * 100).toFixed(1)}%` : 'n/a'}.`,
+    };
+  } else if (f?.eps !== null && f?.eps !== undefined && price && price > 0) {
     const epsYield = (f.eps / price) * 100;
     const score = linearRiskScore(epsYield, -5, 8); // -5%: unprofitable/expensive, 8%+: strongly profitable per price paid
     profitability = {
       score,
       dataAvailable: true,
-      explanation: `EPS yield (trailing EPS / current price) of ${epsYield.toFixed(2)}% — a crude profitability-per-dollar-paid proxy, not a real margin analysis.`,
+      explanation: `EPS yield (trailing EPS / current price) of ${epsYield.toFixed(2)}% — a crude profitability-per-dollar-paid proxy; real margin data not yet ingested for this symbol.`,
     };
   } else {
-    profitability = unavailable('No EPS or price data available to compute an EPS-yield proxy.');
+    profitability = unavailable('No margin data or EPS/price data available to score profitability.');
   }
 
-  // --- Balance sheet: no data source connected. ---
-  const balanceSheet = unavailable('No balance-sheet data source (debt, cash, current ratio) is connected.');
+  // --- Balance sheet: debt/equity + current ratio from fundamentals history. ---
+  let balanceSheet: ConvictionCategoryResult;
+  if (latest && (latest.debtToEquity !== null || latest.currentRatio !== null)) {
+    const deScore = latest.debtToEquity !== null ? 100 - linearRiskScore(latest.debtToEquity, 0, 2) : null;
+    const crScore = latest.currentRatio !== null ? linearRiskScore(latest.currentRatio, 0.5, 2.5) : null;
+    const parts = [deScore, crScore].filter((v): v is number => v !== null);
+    const score = parts.length > 0 ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : 50;
+    balanceSheet = {
+      score,
+      dataAvailable: true,
+      explanation: `Debt/equity ${latest.debtToEquity !== null ? latest.debtToEquity.toFixed(2) : 'n/a'}, current ratio ${latest.currentRatio !== null ? latest.currentRatio.toFixed(2) : 'n/a'} (fiscal ${latest.fiscalYear} ${latest.fiscalPeriod}).`,
+    };
+  } else {
+    balanceSheet = unavailable('No fundamentals-history data (debt/equity, current ratio) ingested yet for this symbol.');
+  }
 
   // --- Qualitative categories: no deterministic formula available. ---
   const competitiveMoat = unavailable('Competitive moat has no deterministic formula from available data — narrative only, from AI reasoning.');
@@ -135,17 +219,28 @@ export function computeConviction(input: ConvictionInput): ConvictionResult {
     valuation = unavailable('No P/E data available for this symbol.');
   }
 
-  // --- Execution risk: realized volatility as an operational-uncertainty proxy. ---
+  // --- Execution risk: realized volatility, with a near-term earnings-proximity modifier. ---
   let executionRisk: ConvictionCategoryResult;
   const vol = annualizedVolatility(input.history);
+  const earningsImminent = input.daysToNextEarnings !== null && input.daysToNextEarnings >= 0 && input.daysToNextEarnings <= 14;
   if (vol !== null) {
+    const baseScore = linearRiskScore(vol * 100, 12, 70);
+    const score = earningsImminent ? Math.min(100, baseScore + 10) : baseScore;
     executionRisk = {
-      score: linearRiskScore(vol * 100, 12, 70),
+      score,
       dataAvailable: true,
-      explanation: `Realized annualized volatility of ${(vol * 100).toFixed(1)}% used as an execution/operational-uncertainty proxy.`,
+      explanation:
+        `Realized annualized volatility of ${(vol * 100).toFixed(1)}% used as an execution/operational-uncertainty proxy.` +
+        (earningsImminent ? ` Elevated +10 for an earnings report in the next ${input.daysToNextEarnings} day(s).` : ''),
+    };
+  } else if (earningsImminent) {
+    executionRisk = {
+      score: 60,
+      dataAvailable: true,
+      explanation: `Not enough price history for realized volatility, but an earnings report is due in ${input.daysToNextEarnings} day(s) — scored as elevated near-term uncertainty.`,
     };
   } else {
-    executionRisk = unavailable('Not enough price history to compute realized volatility.');
+    executionRisk = unavailable('Not enough price history to compute realized volatility, and no near-term earnings date on record.');
   }
 
   // --- Regulatory risk: sector-keyword proxy, same as the portfolio risk engine. ---

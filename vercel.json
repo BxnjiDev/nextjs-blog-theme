@@ -3,12 +3,16 @@
     { "path": "/api/jobs/refresh", "schedule": "*/30 13-20 * * 1-5" },
     { "path": "/api/jobs/monitor", "schedule": "0 */2 * * *" },
     { "path": "/api/jobs/news", "schedule": "15 */2 * * *" },
+    { "path": "/api/jobs/fundamentals", "schedule": "0 8 * * *" },
+    { "path": "/api/jobs/earnings", "schedule": "30 8 * * *" },
     { "path": "/api/jobs/risk", "schedule": "0 10 * * *" },
     { "path": "/api/jobs/thesis", "schedule": "20 10 * * *" },
     { "path": "/api/jobs/recommendations", "schedule": "0 11 * * *" },
     { "path": "/api/jobs/health", "schedule": "20 11 * * *" },
     { "path": "/api/jobs/opportunities", "schedule": "30 11 * * *" },
     { "path": "/api/jobs/outcomes", "schedule": "40 11 * * *" },
-    { "path": "/api/jobs/briefing", "schedule": "50 11 * * *" }
+    { "path": "/api/jobs/briefing", "schedule": "50 11 * * *" },
+    { "path": "/api/jobs/notify", "schedule": "*/15 * * * *" },
+    { "path": "/api/jobs/learning", "schedule": "0 9 * * 0" }
   ]
 }

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider, secFilingsProvider, aiReasoningProvider } from '@/lib/integrations';
 import { getStoredNews, toNewsArticle } from '@/lib/domain/news';
+import { buildMemoryContext } from '@/lib/domain/memory';
 
 /** Idempotency window: re-running the job within this many hours of the last
  * analysis for a holding is a no-op for that holding, so a retried or
@@ -38,12 +39,13 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
     }
 
     try {
-      const [quote, technicals, fundamentals, filings, storedNews] = await Promise.all([
+      const [quote, technicals, fundamentals, filings, storedNews, memoryContext] = await Promise.all([
         marketDataProvider.getQuote(holding.symbol),
         marketDataProvider.getTechnicals(holding.symbol),
         marketDataProvider.getFundamentals(holding.symbol),
         secFilingsProvider.getRecentFilings(holding.symbol, 5),
         getStoredNews({ symbol: holding.symbol, sinceHours: 24 * 7 }),
+        buildMemoryContext(holding.id, holding.symbol),
       ]);
       const news = storedNews.map(toNewsArticle);
 
@@ -60,6 +62,7 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
         previousRecommendation: previous
           ? { thesis: previous.thesis, action: previous.action, generatedAt: previous.generatedAt }
           : null,
+        memoryContext,
       });
 
       await prisma.recommendation.create({
@@ -77,6 +80,9 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
           institutionalSentiment: analysis.institutionalSentiment,
           confidenceScore: analysis.confidenceScore,
           action: analysis.action,
+          expectedOutcome: analysis.expectedOutcome,
+          expectedTimeHorizon: analysis.expectedTimeHorizon,
+          explainability: JSON.parse(JSON.stringify(analysis.explainability)),
           previousId: previous?.id,
           sourcesMeta: {
             quoteAsOf: quote.asOf.toISOString(),

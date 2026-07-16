@@ -4,6 +4,15 @@ import ConfidenceBadge from '@/components/ConfidenceBadge';
 
 export const dynamic = 'force-dynamic';
 
+interface ExplainabilityShape {
+  whyNow: string;
+  whyNot: string;
+  supportingEvidence: string;
+  contradictingEvidence: string;
+  keyAssumptions: string;
+  invalidationConditions: string;
+}
+
 export default async function HoldingsPage() {
   const holdings = await prisma.holding.findMany({
     include: {
@@ -90,6 +99,30 @@ export default async function HoldingsPage() {
                       {rec.technicalTrend ?? 'Not yet assessed'} · {rec.institutionalSentiment ?? 'Institutional sentiment not yet assessed'}
                     </p>
                   </div>
+                  <div className="md:col-span-2">
+                    <h3 className="font-medium text-gray-700 dark:text-gray-300">Expected outcome</h3>
+                    <p className="mt-1 text-gray-600 dark:text-gray-400">
+                      {rec.expectedOutcome} (horizon: {rec.expectedTimeHorizon})
+                    </p>
+                  </div>
+                  {rec.explainability && (
+                    <div className="md:col-span-2 rounded border border-gray-100 p-3 dark:border-gray-800">
+                      <h3 className="font-medium text-gray-700 dark:text-gray-300">Explainability</h3>
+                      {(() => {
+                        const e = rec.explainability as unknown as ExplainabilityShape;
+                        return (
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <p><span className="font-medium">Why now:</span> {e.whyNow}</p>
+                            <p><span className="font-medium">Why not:</span> {e.whyNot}</p>
+                            <p><span className="font-medium">Supporting:</span> {e.supportingEvidence}</p>
+                            <p><span className="font-medium">Contradicting:</span> {e.contradictingEvidence}</p>
+                            <p><span className="font-medium">Assumptions:</span> {e.keyAssumptions}</p>
+                            <p><span className="font-medium">Would invalidate:</span> {e.invalidationConditions}</p>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-gray-500">

@@ -60,15 +60,25 @@ export async function runOpportunityComparisonJob(): Promise<OpportunityComparis
       const comparisonTarget = sameSector ?? weakest;
       if (!comparisonTarget) continue;
 
-      const [oppHistory, holdHistory, holdFundamentals] = await Promise.all([
+      const [oppHistory, holdHistory, holdFundamentals, oppFundamentalSnapshot, holdFundamentalSnapshot] = await Promise.all([
         marketDataProvider.getHistoricalDaily(opportunity.symbol, 60),
         marketDataProvider.getHistoricalDaily(comparisonTarget.holding.symbol, 60),
         marketDataProvider.getFundamentals(comparisonTarget.holding.symbol),
+        prisma.fundamentalSnapshot.findFirst({ where: { symbol: opportunity.symbol, periodType: 'QUARTERLY' }, orderBy: { reportDate: 'desc' } }),
+        prisma.fundamentalSnapshot.findFirst({
+          where: { symbol: comparisonTarget.holding.symbol, periodType: 'QUARTERLY' },
+          orderBy: { reportDate: 'desc' },
+        }),
       ]);
 
       const comparison = compareOpportunityToHolding(
-        { symbol: opportunity.symbol, fundamentals: oppFundamentals, history: oppHistory },
-        { symbol: comparisonTarget.holding.symbol, fundamentals: holdFundamentals, history: holdHistory },
+        { symbol: opportunity.symbol, fundamentals: oppFundamentals, history: oppHistory, revenueGrowth: oppFundamentalSnapshot?.revenueGrowth ?? null },
+        {
+          symbol: comparisonTarget.holding.symbol,
+          fundamentals: holdFundamentals,
+          history: holdHistory,
+          revenueGrowth: holdFundamentalSnapshot?.revenueGrowth ?? null,
+        },
         sp500History
       );
 

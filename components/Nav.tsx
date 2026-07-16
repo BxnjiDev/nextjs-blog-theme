@@ -8,6 +8,7 @@ const links = [
   { href: '/risk', label: 'Risk' },
   { href: '/health', label: 'Health' },
   { href: '/performance', label: 'Performance' },
+  { href: '/scorecard', label: 'Scorecard' },
   { href: '/briefing', label: 'Daily Briefing' },
   { href: '/connections', label: 'Connections' },
 ];

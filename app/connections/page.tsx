@@ -53,9 +53,12 @@ function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: 
 export default async function ConnectionsPage() {
   const hasMarketDataKey = Boolean(process.env.MARKET_DATA_API_KEY);
   const hasNewsKey = Boolean(process.env.NEWS_API_KEY);
+  const hasFundamentalsKey = Boolean(process.env.FUNDAMENTALS_API_KEY);
   const hasEdgarUserAgent = Boolean(process.env.SEC_EDGAR_USER_AGENT);
   const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
   const hasCronSecret = Boolean(process.env.CRON_SECRET);
+  const hasEmailChannel = Boolean(process.env.SMTP_HOST && process.env.ALERT_EMAIL_TO);
+  const hasWebhookChannel = Boolean(process.env.ALERT_WEBHOOK_URL);
 
   const [
     db,
@@ -70,6 +73,10 @@ export default async function ConnectionsPage() {
     latestHealth,
     latestOutcome,
     latestOpportunityComparison,
+    latestFundamentalSnapshot,
+    latestEarningsEvent,
+    latestAlertDelivery,
+    latestScorecard,
   ] = await Promise.all([
     checkDb(),
     checkEdgarReachable(),
@@ -83,6 +90,10 @@ export default async function ConnectionsPage() {
     prisma.portfolioHealthAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.recommendationOutcome.findFirst({ orderBy: { lastEvaluatedAt: 'desc' } }),
     prisma.opportunityComparison.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.fundamentalSnapshot.findFirst({ orderBy: { createdAt: 'desc' } }),
+    prisma.earningsEvent.findFirst({ orderBy: { updatedAt: 'desc' } }),
+    prisma.alertDelivery.findFirst({ orderBy: { createdAt: 'desc' } }),
+    prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
   ]);
 
   return (
@@ -148,6 +159,26 @@ export default async function ConnectionsPage() {
             label="Last opportunity comparison"
             ok={Boolean(latestOpportunityComparison)}
             detail={latestOpportunityComparison ? latestOpportunityComparison.generatedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last fundamentals ingest"
+            ok={Boolean(latestFundamentalSnapshot)}
+            detail={latestFundamentalSnapshot ? latestFundamentalSnapshot.createdAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last earnings-calendar update"
+            ok={Boolean(latestEarningsEvent)}
+            detail={latestEarningsEvent ? latestEarningsEvent.updatedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last alert delivery attempt"
+            ok={Boolean(latestAlertDelivery)}
+            detail={latestAlertDelivery ? `${latestAlertDelivery.status} @ ${latestAlertDelivery.createdAt.toLocaleString()}` : 'Never run'}
+          />
+          <HealthRow
+            label="Last scorecard/learning run"
+            ok={Boolean(latestScorecard)}
+            detail={latestScorecard ? latestScorecard.generatedAt.toLocaleString() : 'Never run'}
           />
         </div>
         {!hasCronSecret && (
@@ -227,6 +258,42 @@ export default async function ConnectionsPage() {
             invented. Sector coverage (AI, semiconductors, defense, aerospace, robotics, data centers, energy,
             cybersecurity) is sourced via representative sector-ETF company news, documented in{' '}
             <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/news.ts</code>.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <h2 className="font-medium">Fundamentals — Financial Modeling Prep (statements, ratios, ownership, earnings)</h2>
+            <StatusPill ok={hasFundamentalsKey} label={hasFundamentalsKey ? 'Key configured' : 'Mock data'} />
+          </div>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">FUNDAMENTALS_API_KEY</code> with a{' '}
+            <a href="https://financialmodelingprep.com" className="underline" target="_blank" rel="noreferrer">
+              Financial Modeling Prep
+            </a>{' '}
+            key. Powers the historical financial-statement/ratio ingestion (
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/ingestFundamentals.ts</code>) and the forward earnings
+            calendar (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/ingestEarnings.ts</code>), which together
+            populate the revenue-growth and balance-sheet conviction categories that were previously unavailable. This vendor could
+            not be live-tested in this sandbox (egress blocked, same as Twelve Data/SEC EDGAR) — see ARCHITECTURE.md.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <h2 className="font-medium">Alert delivery — email &amp; webhook</h2>
+            <StatusPill
+              ok={hasEmailChannel || hasWebhookChannel}
+              label={hasEmailChannel || hasWebhookChannel ? 'At least one channel configured' : 'No channel configured'}
+            />
+          </div>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">SMTP_HOST</code>/<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ALERT_EMAIL_TO</code> for
+            email (any SMTP server) and/or <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ALERT_WEBHOOK_URL</code> for a
+            webhook. Delivery runs through provider interfaces (
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/notifications.ts</code>) completely separate from
+            alert generation — adding Slack/Discord/SMS/push later means adding one provider class, not touching the alert engine.
+            Without any channel configured, alerts are still generated and stored, just not delivered anywhere.
           </p>
         </div>
 

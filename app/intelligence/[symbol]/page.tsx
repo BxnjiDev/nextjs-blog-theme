@@ -2,7 +2,17 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
+import ActionBadge from '@/components/ActionBadge';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+
+interface ExplainabilityShape {
+  whyNow: string;
+  whyNot: string;
+  supportingEvidence: string;
+  contradictingEvidence: string;
+  keyAssumptions: string;
+  invalidationConditions: string;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +42,13 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
         include: {
           changeEvents: { orderBy: { createdAt: 'desc' } },
           convictionAssessments: { orderBy: { generatedAt: 'asc' } },
+          accuracyScores: { orderBy: { generatedAt: 'desc' }, take: 1 },
         },
+      },
+      recommendations: {
+        orderBy: { generatedAt: 'desc' },
+        take: 10,
+        include: { outcome: true },
       },
     },
   });
@@ -43,6 +59,16 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
   const convictions = thesis?.convictionAssessments ?? [];
   const latestConviction = convictions[convictions.length - 1] ?? null;
   const chartData = convictions.map((c) => ({ label: c.generatedAt.toLocaleDateString(), value: c.overallScore }));
+  const latestAccuracy = thesis?.accuracyScores[0] ?? null;
+  const recommendations = holding.recommendations;
+  const latestRecommendation = recommendations[0] ?? null;
+  const explainability = (latestRecommendation?.explainability ?? null) as ExplainabilityShape | null;
+
+  const recentFundamentals = await prisma.fundamentalSnapshot.findMany({
+    where: { symbol: holding.symbol, periodType: 'QUARTERLY' },
+    orderBy: { reportDate: 'desc' },
+    take: 4,
+  });
 
   return (
     <div className="space-y-8">
@@ -107,6 +133,56 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
             </div>
           </div>
 
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+              <h2 className="font-medium text-risk-low">What would strengthen this</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.whatWouldStrengthen}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+              <h2 className="font-medium text-risk-high">What would weaken this</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.whatWouldWeaken}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+              <h2 className="font-medium text-gray-700 dark:text-gray-300">Sell conditions</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.sellConditions}</p>
+            </div>
+          </div>
+
+          {recentFundamentals.length > 0 && (
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+              <h2 className="mb-3 font-medium">Recent financials</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] text-left text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 dark:text-gray-400">
+                      <th className="pb-2 pr-4">Period</th>
+                      <th className="pb-2 pr-4">Revenue</th>
+                      <th className="pb-2 pr-4">YoY growth</th>
+                      <th className="pb-2 pr-4">Net margin</th>
+                      <th className="pb-2">EPS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentFundamentals.map((f) => (
+                      <tr key={f.id} className="border-t border-gray-100 dark:border-gray-800">
+                        <td className="py-2 pr-4">
+                          {f.fiscalPeriod} FY{f.fiscalYear}
+                        </td>
+                        <td className="py-2 pr-4">{f.revenue !== null ? `$${(f.revenue / 1_000_000).toFixed(0)}M` : 'n/a'}</td>
+                        <td className="py-2 pr-4">{f.revenueGrowth !== null ? `${(f.revenueGrowth * 100).toFixed(1)}%` : 'n/a'}</td>
+                        <td className="py-2 pr-4">{f.netMargin !== null ? `${(f.netMargin * 100).toFixed(1)}%` : 'n/a'}</td>
+                        <td className="py-2">{f.eps !== null ? f.eps.toFixed(2) : 'n/a'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Source: {recentFundamentals[0].source} ({recentFundamentals[0].quality}).
+              </p>
+            </div>
+          )}
+
           {latestConviction && (
             <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
               <h2 className="mb-3 font-medium">Conviction category breakdown</h2>
@@ -150,6 +226,86 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                 ))}
               </ol>
             )}
+          </div>
+
+          {latestAccuracy && (
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+              <h2 className="mb-1 font-medium">Thesis accuracy (retrospective)</h2>
+              <p className="text-3xl font-semibold">{latestAccuracy.overallScore}/100</p>
+              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                <p>Revenue: {latestAccuracy.revenueAccuracy !== null ? `${latestAccuracy.revenueAccuracy}/100` : 'No data'}</p>
+                <p>Margins: {latestAccuracy.marginAccuracy !== null ? `${latestAccuracy.marginAccuracy}/100` : 'No data'}</p>
+                <p>Valuation: {latestAccuracy.valuationAccuracy !== null ? `${latestAccuracy.valuationAccuracy}/100` : 'No data'}</p>
+                <p>Timing: {latestAccuracy.timingAccuracy !== null ? `${latestAccuracy.timingAccuracy}/100` : 'No data'}</p>
+                <p>Catalysts achieved: No deterministic measure available.</p>
+                <p>Risks realized: No deterministic measure available.</p>
+              </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Computed {latestAccuracy.generatedAt.toLocaleDateString()} — see lib/jobs/computeThesisAccuracy.ts for methodology.
+              </p>
+            </div>
+          )}
+
+          {latestRecommendation && explainability && (
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+              <h2 className="mb-3 font-medium">Explainability (latest recommendation)</h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                <p className="text-sm"><span className="font-medium">Why now:</span> {explainability.whyNow}</p>
+                <p className="text-sm"><span className="font-medium">Why not:</span> {explainability.whyNot}</p>
+                <p className="text-sm"><span className="font-medium">Supporting evidence:</span> {explainability.supportingEvidence}</p>
+                <p className="text-sm"><span className="font-medium">Contradicting evidence:</span> {explainability.contradictingEvidence}</p>
+                <p className="text-sm"><span className="font-medium">Key assumptions:</span> {explainability.keyAssumptions}</p>
+                <p className="text-sm"><span className="font-medium">What would invalidate this:</span> {explainability.invalidationConditions}</p>
+              </div>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                Expected outcome: {latestRecommendation.expectedOutcome} (horizon: {latestRecommendation.expectedTimeHorizon})
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <h2 className="mb-3 font-medium">Recommendation history &amp; performance attribution</h2>
+            {recommendations.length === 0 ? (
+              <p className="text-sm text-gray-500">No recommendations generated yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500 dark:text-gray-400">
+                      <th className="pb-2 pr-4">Date</th>
+                      <th className="pb-2 pr-4">Action</th>
+                      <th className="pb-2 pr-4">Confidence</th>
+                      <th className="pb-2 pr-4">30d</th>
+                      <th className="pb-2 pr-4">90d</th>
+                      <th className="pb-2 pr-4">Alpha 90d</th>
+                      <th className="pb-2">Graded?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recommendations.map((r) => (
+                      <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800">
+                        <td className="py-2 pr-4">{r.generatedAt.toLocaleDateString()}</td>
+                        <td className="py-2 pr-4">
+                          <ActionBadge action={r.action} />
+                        </td>
+                        <td className="py-2 pr-4">{r.confidenceScore}/10</td>
+                        <td className="py-2 pr-4">{r.outcome?.return30d !== null && r.outcome?.return30d !== undefined ? `${r.outcome.return30d.toFixed(1)}%` : 'Pending'}</td>
+                        <td className="py-2 pr-4">{r.outcome?.return90d !== null && r.outcome?.return90d !== undefined ? `${r.outcome.return90d.toFixed(1)}%` : 'Pending'}</td>
+                        <td className="py-2 pr-4">{r.outcome?.alpha90d !== null && r.outcome?.alpha90d !== undefined ? `${r.outcome.alpha90d.toFixed(1)}pp` : 'Pending'}</td>
+                        <td className="py-2">
+                          {r.outcome?.wasCorrect === true ? 'Correct' : r.outcome?.wasCorrect === false ? 'Incorrect' : 'Not yet graded'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Atlas has no execution layer — every outcome above tracks what would have happened had this holding simply
+              been held, benchmarked against SPY. Grading (correct/incorrect) happens once, at the 90-day mark; see{' '}
+              <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/evaluateRecommendations.ts</code>.
+            </p>
           </div>
         </>
       )}

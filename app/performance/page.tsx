@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import ActionBadge from '@/components/ActionBadge';
 import { formatPercent } from '@/lib/format';
@@ -30,6 +31,11 @@ export default async function PerformancePage() {
           alternate universe to compare against. Windows that haven&rsquo;t elapsed yet show &ldquo;pending&rdquo;,
           not an estimate.
         </p>
+        <p className="mt-2 text-sm">
+          <Link href="/scorecard" className="text-blue-600 hover:underline dark:text-blue-400">
+            See the aggregate scorecard, confidence calibration, and detected patterns →
+          </Link>
+        </p>
       </div>
 
       {outcomes.length === 0 ? (
@@ -48,6 +54,7 @@ export default async function PerformancePage() {
                 <th className="px-4 py-2">90d</th>
                 <th className="px-4 py-2">180d</th>
                 <th className="px-4 py-2">365d</th>
+                <th className="px-4 py-2">Graded</th>
               </tr>
             </thead>
             <tbody>
@@ -70,10 +77,38 @@ export default async function PerformancePage() {
                   <td className="px-4 py-2">
                     <ReturnCell ret={o.return365d} alpha={o.alpha365d} />
                   </td>
+                  <td className="px-4 py-2 text-xs">
+                    {o.wasCorrect === true ? (
+                      <span className="text-risk-low">Correct</span>
+                    ) : o.wasCorrect === false ? (
+                      <span className="text-risk-high">Incorrect</span>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500">Not yet</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {outcomes.some((o) => o.lessonsLearned) && (
+        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <h2 className="mb-3 font-medium">Self-critique (lessons learned)</h2>
+          <ul className="space-y-3 text-sm">
+            {outcomes
+              .filter((o) => o.lessonsLearned)
+              .slice(0, 10)
+              .map((o) => (
+                <li key={o.id} className="border-l-2 border-gray-200 pl-3 dark:border-gray-800">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {o.symbol} · {o.recommendedAt.toLocaleDateString()}
+                  </p>
+                  <p className="mt-1 text-gray-700 dark:text-gray-300">{o.lessonsLearned}</p>
+                </li>
+              ))}
+          </ul>
         </div>
       )}
     </div>

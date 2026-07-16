@@ -17,6 +17,9 @@ export interface RiskHoldingInput {
   history: HistoricalPricePoint[]; // ~60 sessions, newest-first
   fundamentals: CompanyFundamentals | null;
   daysSinceLastFiling: number | null;
+  /** From the real earnings calendar (lib/jobs/ingestEarnings.ts), when
+   * available — takes priority over the days-since-last-filing proxy. */
+  daysToNextEarnings: number | null;
   negativeNewsCritical: number;
   negativeNewsHigh: number;
 }
@@ -311,14 +314,25 @@ export function computeRisk(input: RiskCalculationInput): RiskResult {
     : { score: NEUTRAL_UNKNOWN_SCORE, explanation: 'No P/E data available for any holding.' };
   inputs.valuation = { perHoldingPe };
 
-  // --- Earnings-event proxy (days since last filing) ---
+  // --- Earnings-event risk: real forward calendar when available (closer
+  // report date = higher near-term uncertainty), falling back to the
+  // days-since-last-filing proxy only for holdings with no calendar entry. ---
   let earnSum = 0;
   let earnWeightTotal = 0;
+  let usedRealCalendarCount = 0;
   const perHoldingDays: Record<string, number | null> = {};
+  const perHoldingDaysToEarnings: Record<string, number | null> = {};
   for (const h of input.holdings) {
     perHoldingDays[h.view.symbol] = h.daysSinceLastFiling;
+    perHoldingDaysToEarnings[h.view.symbol] = h.daysToNextEarnings;
     const weight = input.totalValue > 0 ? h.view.marketValue / input.totalValue : 0;
-    if (h.daysSinceLastFiling !== null) {
+    if (h.daysToNextEarnings !== null) {
+      // Closer to the report date = more near-term uncertainty: score peaks
+      // inside a 2-week window and falls off further out.
+      earnSum += linearRiskScore(14 - Math.min(14, h.daysToNextEarnings), 0, 14) * weight;
+      earnWeightTotal += weight;
+      usedRealCalendarCount++;
+    } else if (h.daysSinceLastFiling !== null) {
       earnSum += linearRiskScore(h.daysSinceLastFiling, 60, 95) * weight;
       earnWeightTotal += weight;
     }
@@ -326,10 +340,13 @@ export function computeRisk(input: RiskCalculationInput): RiskResult {
   const earningsRisk: ComponentResult = earnWeightTotal > 0
     ? {
         score: Math.round(earnSum / earnWeightTotal),
-        explanation: 'Proxy based on days since each holding’s last SEC filing vs. a ~90-day quarterly cadence (no forward earnings calendar connected).',
+        explanation:
+          usedRealCalendarCount > 0
+            ? `${usedRealCalendarCount} of ${input.holdings.length} holding(s) scored from the real forward earnings calendar (proximity to next report date); remainder from the days-since-last-filing proxy.`
+            : 'Proxy based on days since each holding’s last SEC filing vs. a ~90-day quarterly cadence (no forward earnings calendar entry for any holding).',
       }
-    : { score: NEUTRAL_UNKNOWN_SCORE, explanation: 'No filing-date data available to gauge proximity to the next earnings report.' };
-  inputs.earnings = { perHoldingDaysSinceLastFiling: perHoldingDays };
+    : { score: NEUTRAL_UNKNOWN_SCORE, explanation: 'No filing-date or earnings-calendar data available to gauge proximity to the next earnings report.' };
+  inputs.earnings = { perHoldingDaysSinceLastFiling: perHoldingDays, perHoldingDaysToNextEarnings: perHoldingDaysToEarnings };
 
   // --- Regulatory (sector-keyword proxy) ---
   const regulatedWeight = input.holdings.reduce((sum, h) => {

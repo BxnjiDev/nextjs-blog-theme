@@ -15,6 +15,8 @@ export interface ComparisonEntity {
   symbol: string;
   fundamentals: CompanyFundamentals | null;
   history: HistoricalPricePoint[];
+  /** Latest ingested YoY revenue growth (decimal, e.g. 0.15 = +15%), if any. */
+  revenueGrowth: number | null;
 }
 
 export interface OpportunityComparisonResult {
@@ -39,6 +41,21 @@ export function compareOpportunityToHolding(
   sp500History: HistoricalPricePoint[]
 ): OpportunityComparisonResult {
   const metrics: ComparisonMetric[] = [];
+
+  // --- Growth (YoY revenue growth, from ingested fundamentals history) ---
+  const oppGrowth = opportunity.revenueGrowth;
+  const holdGrowth = holding.revenueGrowth;
+  if (oppGrowth !== null && holdGrowth !== null) {
+    metrics.push({
+      metric: 'Revenue growth (YoY)',
+      opportunityValue: `${(oppGrowth * 100).toFixed(1)}%`,
+      holdingValue: `${(holdGrowth * 100).toFixed(1)}%`,
+      edge: oppGrowth > holdGrowth ? 'opportunity' : oppGrowth < holdGrowth ? 'holding' : 'neutral',
+      dataAvailable: true,
+    });
+  } else {
+    metrics.push({ metric: 'Revenue growth (YoY)', opportunityValue: 'n/a', holdingValue: 'n/a', edge: 'neutral', dataAvailable: false });
+  }
 
   // --- Valuation (P/E) ---
   const oppPe = opportunity.fundamentals?.peRatio ?? null;
@@ -101,7 +118,7 @@ export function compareOpportunityToHolding(
   }
 
   const unavailableNote =
-    'Growth rate, competitive position, AI exposure, financial quality, capital efficiency, management quality, and forward catalysts have no deterministic data source connected in this app and are not scored — avoid treating this comparison as complete on those dimensions.';
+    'Competitive position, AI exposure, capital efficiency, management quality, and forward catalysts have no deterministic data source connected in this app and are not scored — avoid treating this comparison as complete on those dimensions.';
 
   const scored = metrics.filter((m) => m.dataAvailable);
   const opportunityWins = scored.filter((m) => m.edge === 'opportunity').length;

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { marketDataProvider, secFilingsProvider, aiReasoningProvider } from '@/lib/integrations';
 import { getStoredNews, toNewsArticle } from '@/lib/domain/news';
 import { computeConviction, type ConvictionResult } from '@/lib/domain/conviction';
+import { getFundamentalHistory } from '@/lib/domain/fundamentalsHistory';
 import { buildMemoryContext } from '@/lib/domain/memory';
 import { createAlertIfNew } from '@/lib/domain/alerts';
 
@@ -75,24 +76,30 @@ export async function runThesisJob(options?: { force?: boolean }): Promise<Thesi
     }
 
     try {
-      const [quote, technicals, fundamentals, filings, storedNews, history, sp500History, previousConviction] = await Promise.all([
-        marketDataProvider.getQuote(holding.symbol),
-        marketDataProvider.getTechnicals(holding.symbol),
-        marketDataProvider.getFundamentals(holding.symbol),
-        secFilingsProvider.getRecentFilings(holding.symbol, 5),
-        getStoredNews({ symbol: holding.symbol, sinceHours: 24 * 14 }),
-        marketDataProvider.getHistoricalDaily(holding.symbol, 60),
-        marketDataProvider.getSp500History(60),
-        prisma.convictionAssessment.findFirst({ where: { symbol: holding.symbol }, orderBy: { generatedAt: 'desc' } }),
-      ]);
+      const [quote, technicals, fundamentals, filings, storedNews, history, sp500History, previousConviction, fundamentalHistory, nextEarnings] =
+        await Promise.all([
+          marketDataProvider.getQuote(holding.symbol),
+          marketDataProvider.getTechnicals(holding.symbol),
+          marketDataProvider.getFundamentals(holding.symbol),
+          secFilingsProvider.getRecentFilings(holding.symbol, 5),
+          getStoredNews({ symbol: holding.symbol, sinceHours: 24 * 14 }),
+          marketDataProvider.getHistoricalDaily(holding.symbol, 60),
+          marketDataProvider.getSp500History(60),
+          prisma.convictionAssessment.findFirst({ where: { symbol: holding.symbol }, orderBy: { generatedAt: 'desc' } }),
+          getFundamentalHistory(holding.symbol),
+          prisma.earningsEvent.findFirst({ where: { symbol: holding.symbol, isEstimate: true }, orderBy: { reportDate: 'asc' } }),
+        ]);
       const news = storedNews.map(toNewsArticle);
+      const daysToNextEarnings = nextEarnings ? Math.round((nextEarnings.reportDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
 
       const conviction = computeConviction({
         symbol: holding.symbol,
         fundamentals,
+        fundamentalHistory,
         history,
         sp500History,
         sector: holding.sector,
+        daysToNextEarnings,
       });
 
       const memoryContext = await buildMemoryContext(holding.id, holding.symbol);
@@ -119,6 +126,9 @@ export async function runThesisJob(options?: { force?: boolean }): Promise<Thesi
               bearCase: existingThesis.bearCase,
               catalysts: existingThesis.catalysts,
               investmentHorizon: existingThesis.investmentHorizon,
+              whatWouldStrengthen: existingThesis.whatWouldStrengthen,
+              whatWouldWeaken: existingThesis.whatWouldWeaken,
+              sellConditions: existingThesis.sellConditions,
               convictionScore: existingThesis.convictionScore,
               lastReviewedAt: existingThesis.lastReviewedAt,
             }
@@ -198,6 +208,9 @@ export async function runThesisJob(options?: { force?: boolean }): Promise<Thesi
             bearCase: narrative.bearCase,
             catalysts: narrative.catalysts,
             investmentHorizon: narrative.investmentHorizon,
+            whatWouldStrengthen: narrative.whatWouldStrengthen,
+            whatWouldWeaken: narrative.whatWouldWeaken,
+            sellConditions: narrative.sellConditions,
             convictionScore: conviction.overallScore,
           },
         });
@@ -215,6 +228,9 @@ export async function runThesisJob(options?: { force?: boolean }): Promise<Thesi
             bearCase: narrative.bearCase,
             catalysts: narrative.catalysts,
             investmentHorizon: narrative.investmentHorizon,
+            whatWouldStrengthen: narrative.whatWouldStrengthen,
+            whatWouldWeaken: narrative.whatWouldWeaken,
+            sellConditions: narrative.sellConditions,
             convictionScore: conviction.overallScore,
             lastReviewedAt: new Date(),
           },
