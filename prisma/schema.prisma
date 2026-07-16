@@ -69,6 +69,34 @@ enum AlertType {
   NEW_OPPORTUNITY
   BETTER_RISK_REWARD
   NEW_SEC_FILING
+  CONCENTRATION_RISK
+  RISK_SCORE_INCREASE
+  MAJOR_NEGATIVE_NEWS
+  UPCOMING_EARNINGS
+  STALE_DATA
+}
+
+enum ThesisChangeType {
+  INITIAL
+  THESIS_CHANGED
+  CONVICTION_CHANGED
+  RISK_CHANGED
+  VALUATION_CHANGED
+  RETURN_EXPECTATION_CHANGED
+  ROUTINE_REVIEW_NO_CHANGE
+}
+
+enum MaterialityLevel {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ComparisonEdge {
+  FAVORS_OPPORTUNITY
+  FAVORS_HOLDING
+  NEUTRAL
 }
 
 enum AlertSeverity {
@@ -100,34 +128,35 @@ enum TradeProposalStatus {
 /// A connected brokerage account (e.g. a Robinhood Agentic Trading account).
 /// Populated by syncing from the brokerage integration, not hand-edited.
 model Account {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   provider     String // e.g. "robinhood"
-  externalId   String   @unique // brokerage account id
-  cashBalance  Decimal  @default(0)
-  buyingPower  Decimal  @default(0)
+  externalId   String    @unique // brokerage account id
+  cashBalance  Decimal   @default(0)
+  buyingPower  Decimal   @default(0)
   lastSyncedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  holdings      Holding[]
-  transactions  Transaction[]
+  holdings       Holding[]
+  transactions   Transaction[]
   tradeProposals TradeProposal[]
 }
 
 /// A current position, mirrored from the brokerage account.
 model Holding {
-  id            String     @id @default(cuid())
-  accountId     String
-  account       Account    @relation(fields: [accountId], references: [id])
-  symbol        String
-  name          String
-  assetClass    AssetClass @default(EQUITY)
-  sector        String?
-  quantity      Decimal
-  avgCostBasis  Decimal
-  updatedAt     DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  accountId    String
+  account      Account    @relation(fields: [accountId], references: [id])
+  symbol       String
+  name         String
+  assetClass   AssetClass @default(EQUITY)
+  sector       String?
+  quantity     Decimal
+  avgCostBasis Decimal
+  updatedAt    DateTime   @updatedAt
 
   recommendations Recommendation[]
+  thesis          Thesis?
 
   @@unique([accountId, symbol])
   @@index([symbol])
@@ -135,16 +164,16 @@ model Holding {
 
 /// Historical fills, mirrored from the brokerage account.
 model Transaction {
-  id          String            @id @default(cuid())
-  accountId   String
-  account     Account           @relation(fields: [accountId], references: [id])
-  symbol      String
-  side        TradeSide
-  quantity    Decimal
-  price       Decimal
-  source      TransactionSource @default(MANUAL)
-  externalId  String?           @unique // brokerage order/fill id
-  executedAt  DateTime
+  id         String            @id @default(cuid())
+  accountId  String
+  account    Account           @relation(fields: [accountId], references: [id])
+  symbol     String
+  side       TradeSide
+  quantity   Decimal
+  price      Decimal
+  source     TransactionSource @default(MANUAL)
+  externalId String?           @unique // brokerage order/fill id
+  executedAt DateTime
 
   @@index([symbol])
   @@index([executedAt])
@@ -153,10 +182,10 @@ model Transaction {
 /// End-of-day (or intraday) price ticks, used for performance charts and
 /// benchmark comparisons. Backed by a market-data provider integration.
 model PriceSnapshot {
-  id        String   @id @default(cuid())
-  symbol    String
-  price     Decimal
-  volume    BigInt?
+  id         String   @id @default(cuid())
+  symbol     String
+  price      Decimal
+  volume     BigInt?
   capturedAt DateTime
 
   @@index([symbol, capturedAt])
@@ -165,11 +194,11 @@ model PriceSnapshot {
 /// Portfolio value vs. S&P 500, tracked over time for the overview page and
 /// performance-tracking metrics (CAGR, alpha, beta, Sharpe, drawdown).
 model PerformanceSnapshot {
-  id              String   @id @default(cuid())
-  date            DateTime @unique
-  portfolioValue  Decimal
-  sp500Value      Decimal
-  cashBalance     Decimal
+  id             String   @id @default(cuid())
+  date           DateTime @unique
+  portfolioValue Decimal
+  sp500Value     Decimal
+  cashBalance    Decimal
 
   @@index([date])
 }
@@ -178,12 +207,12 @@ model PerformanceSnapshot {
 /// creates a new row rather than overwriting the last one, so "has the
 /// thesis changed?" can be answered by diffing against `previousId`.
 model Recommendation {
-  id                     String            @id @default(cuid())
+  id                     String                 @id @default(cuid())
   holdingId              String
-  holding                Holding           @relation(fields: [holdingId], references: [id])
+  holding                Holding                @relation(fields: [holdingId], references: [id])
   symbol                 String
   thesis                 String
-  thesisChanged          Boolean           @default(false)
+  thesisChanged          Boolean                @default(false)
   bullCase               String
   bearCase               String
   catalysts              String
@@ -197,10 +226,11 @@ model Recommendation {
   /// (quote/fundamentals asOf + quality, filing count, news count) — lets
   /// the dashboard show exactly how current an analysis is.
   sourcesMeta            Json?
-  previousId             String?           @unique
-  previous               Recommendation?   @relation("RecommendationHistory", fields: [previousId], references: [id])
-  next                   Recommendation?   @relation("RecommendationHistory")
-  generatedAt            DateTime          @default(now())
+  previousId             String?                @unique
+  previous               Recommendation?        @relation("RecommendationHistory", fields: [previousId], references: [id])
+  next                   Recommendation?        @relation("RecommendationHistory")
+  outcome                RecommendationOutcome?
+  generatedAt            DateTime               @default(now())
 
   @@index([symbol, generatedAt])
   @@index([holdingId, generatedAt])
@@ -208,30 +238,47 @@ model Recommendation {
 
 /// Candidates not currently held — the "Opportunities" surface.
 model Opportunity {
-  id              String              @id @default(cuid())
+  id              String                  @id @default(cuid())
   symbol          String
   name            String
   category        OpportunityCategory
   thesis          String
   confidenceScore Int // 1-10
-  identifiedAt    DateTime            @default(now())
+  identifiedAt    DateTime                @default(now())
   dismissedAt     DateTime?
+  comparisons     OpportunityComparison[]
 
   @@index([symbol])
 }
 
 /// Portfolio-level risk dashboard snapshot. Each factor is scored 1-100
-/// (higher = riskier) so the UI can render a consistent gauge.
+/// (higher = riskier) so the UI can render a consistent gauge. Produced by
+/// lib/jobs/generateRiskAssessment.ts from deterministic calculations (see
+/// lib/domain/risk.ts) — `inputs` and `explanation` make every score
+/// traceable back to the numbers that produced it.
 model RiskAssessment {
   id                String   @id @default(cuid())
   concentrationRisk Int
   sectorRisk        Int
+  volatilityRisk    Int
+  betaRisk          Int
+  drawdownRisk      Int
   valuationRisk     Int
   earningsRisk      Int
   regulatoryRisk    Int
   liquidityRisk     Int
   macroRisk         Int
+  newsRisk          Int
+  stalenessRisk     Int
   overallScore      Int
+  previousScore     Int?
+  /// Raw numeric inputs behind each component (top-3/top-5 exposure %,
+  /// realized volatility, beta, max drawdown, HHI, etc.) — the "defensible
+  /// calculation" audit trail.
+  inputs            Json
+  /// Per-component plain-English explanation of what drove that score.
+  explanation       Json
+  dataSourcesMeta   Json?
   notes             String?
   generatedAt       DateTime @default(now())
 
@@ -253,18 +300,33 @@ model Briefing {
 
 /// A news/filing/event item surfaced by the monitoring layer. `materiality`
 /// is a 1-10 score used to decide whether it's worth surfacing at all
-/// ("only notify when genuinely meaningful").
+/// ("only notify when genuinely meaningful"). `dedupeKey` (headline+source
+/// normalized, or URL) is how the news job avoids storing the same story —
+/// including syndicated copies — twice.
 model NewsItem {
-  id           String   @id @default(cuid())
-  symbol       String? // null for macro/market-wide items
-  headline     String
-  summary      String?
-  source       String
-  url          String?
-  materiality  Int // 1-10
-  publishedAt  DateTime
+  id               String           @id @default(cuid())
+  symbol           String? // primary/first associated ticker; null for macro/market-wide items
+  tickers          Json             @default("[]") // every ticker this story is associated with
+  headline         String
+  summary          String?
+  source           String
+  url              String?
+  /// -1 (very negative) to 1 (very positive), from a deterministic keyword
+  /// lexicon over the fetched headline/summary — never an invented opinion.
+  sentiment        Float?
+  materiality      Int // 1-10, fine-grained
+  materialityLevel MaterialityLevel
+  /// 0-100: how relevant this is to the CURRENT portfolio's actual exposure
+  /// (holds the ticker, or the sector/topic the story covers).
+  relevanceScore   Int
+  /// 'live' | 'delayed' | 'mock' — reused DataQuality convention.
+  quality          String           @default("mock")
+  dedupeKey        String           @unique
+  publishedAt      DateTime
+  createdAt        DateTime         @default(now())
 
   @@index([symbol, publishedAt])
+  @@index([materialityLevel, publishedAt])
 }
 
 /// A surfaced alert per the spec's "Alerts" section. `dedupeKey` (e.g.
@@ -292,26 +354,193 @@ model Alert {
 /// Execution itself happens via the Robinhood Agentic Trading MCP
 /// connector, not a stored-credential REST call — see ARCHITECTURE.md.
 model TradeProposal {
-  id              String              @id @default(cuid())
-  accountId       String
-  account         Account             @relation(fields: [accountId], references: [id])
-  symbol          String
-  side            TradeSide
-  quantity        Decimal
-  orderType       OrderType
-  limitPrice      Decimal?
-  stopPrice       Decimal?
-  mode            TradeMode           @default(MANUAL_APPROVAL)
-  reasoning       String
-  confidenceScore Int // 1-10
-  supportingData  Json
-  reversible      Boolean             @default(true)
-  status          TradeProposalStatus @default(PENDING_APPROVAL)
-  robinhoodOrderId String?            @unique
-  createdAt       DateTime            @default(now())
-  decidedAt       DateTime?
-  executedAt      DateTime?
+  id               String              @id @default(cuid())
+  accountId        String
+  account          Account             @relation(fields: [accountId], references: [id])
+  symbol           String
+  side             TradeSide
+  quantity         Decimal
+  orderType        OrderType
+  limitPrice       Decimal?
+  stopPrice        Decimal?
+  mode             TradeMode           @default(MANUAL_APPROVAL)
+  reasoning        String
+  confidenceScore  Int // 1-10
+  supportingData   Json
+  reversible       Boolean             @default(true)
+  status           TradeProposalStatus @default(PENDING_APPROVAL)
+  robinhoodOrderId String?             @unique
+  createdAt        DateTime            @default(now())
+  decidedAt        DateTime?
+  executedAt       DateTime?
 
   @@index([status])
+  @@index([symbol])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: persistent thesis engine, conviction engine, portfolio health,
+// opportunity comparisons, and recommendation-outcome (performance
+// attribution) tracking.
+// ---------------------------------------------------------------------------
+
+/// The living, persistent investment thesis for a holding — one row per
+/// holding, updated in place as understanding evolves. It is NOT
+/// regenerated from scratch on every job run: lib/jobs/generateThesis.ts
+/// only rewrites these fields when the AI reasoning step + conviction
+/// engine together conclude something materially changed; otherwise only
+/// `lastReviewedAt` moves. The full evolution is reconstructable from
+/// `changeEvents`, which are append-only and never edited.
+model Thesis {
+  id                    String                 @id @default(cuid())
+  holdingId             String                 @unique
+  holding               Holding                @relation(fields: [holdingId], references: [id])
+  symbol                String
+  companyOverview       String
+  originalThesis        String
+  growthDrivers         String
+  competitiveAdvantages String
+  risks                 String
+  bullCase              String
+  bearCase              String
+  catalysts             String
+  investmentHorizon     String
+  /// 0-100, mirrors the latest ConvictionAssessment.overallScore.
+  convictionScore       Int
+  establishedAt         DateTime               @default(now())
+  lastReviewedAt        DateTime               @default(now())
+  changeEvents          ThesisChangeEvent[]
+  convictionAssessments ConvictionAssessment[]
+
+  @@index([symbol])
+}
+
+/// Append-only log of what changed about a thesis, why, and the evidence —
+/// never updated or deleted once written. This is the permanent thesis
+/// history/timeline.
+model ThesisChangeEvent {
+  id               String           @id @default(cuid())
+  thesisId         String
+  thesis           Thesis           @relation(fields: [thesisId], references: [id])
+  symbol           String
+  changeType       ThesisChangeType
+  whatChanged      String?
+  whyChanged       String?
+  confidenceBefore Int?
+  confidenceAfter  Int?
+  /// Structured evidence used to make the call (fundamentals deltas, filing
+  /// references, news items, technical shifts).
+  evidence         Json?
+  /// Sources cited: [{type: 'filing'|'news'|'fundamentals'|'quote', ref, url?}]
+  sources          Json?
+  createdAt        DateTime         @default(now())
+
+  @@index([thesisId, createdAt])
+  @@index([symbol, createdAt])
+}
+
+/// One deterministic conviction scoring run for a holding. Category scores
+/// are nullable — a category is only scored when real data supports it;
+/// otherwise it's left null and excluded from the weighted average rather
+/// than filled with a guessed number. `methodology` records exactly how
+/// each score (or the decision not to score it) was reached.
+model ConvictionAssessment {
+  id                  String   @id @default(cuid())
+  thesisId            String
+  thesis              Thesis   @relation(fields: [thesisId], references: [id])
+  symbol              String
+  financialStrength   Int?
+  revenueGrowth       Int?
+  profitability       Int?
+  balanceSheet        Int?
+  competitiveMoat     Int?
+  aiPositioning       Int?
+  managementExecution Int?
+  industryLeadership  Int?
+  productInnovation   Int?
+  valuation           Int?
+  executionRisk       Int?
+  regulatoryRisk      Int?
+  macroSensitivity    Int?
+  /// Weighted average of the categories that had real data, 0-100.
+  overallScore        Int
+  previousScore       Int?
+  methodology         Json
+  generatedAt         DateTime @default(now())
+
+  @@index([thesisId, generatedAt])
+  @@index([symbol, generatedAt])
+}
+
+/// Portfolio-level health score, tracked over time (append-only) so trend
+/// can be shown. Deterministic — see lib/domain/portfolioHealth.ts.
+model PortfolioHealthAssessment {
+  id                   String   @id @default(cuid())
+  diversificationScore Int
+  qualityScore         Int
+  growthScore          Int
+  riskScore            Int
+  valuationScore       Int
+  sectorBalanceScore   Int
+  cashAllocationScore  Int
+  concentrationScore   Int
+  macroExposureScore   Int
+  overallScore         Int
+  previousScore        Int?
+  componentBreakdown   Json
+  topImprovements      Json
+  topConcerns          Json
+  generatedAt          DateTime @default(now())
+
+  @@index([generatedAt])
+}
+
+/// Evidence-based comparison of a not-yet-held Opportunity against the most
+/// relevant current holding — never "replace because trending."
+model OpportunityComparison {
+  id               String         @id @default(cuid())
+  opportunityId    String
+  opportunity      Opportunity    @relation(fields: [opportunityId], references: [id])
+  comparedToSymbol String
+  metrics          Json
+  narrative        String
+  overallEdge      ComparisonEdge
+  generatedAt      DateTime       @default(now())
+
+  @@index([opportunityId, generatedAt])
+}
+
+/// Performance attribution for a single Recommendation. Price/SPY levels
+/// are captured once at recommendation time; return/alpha columns fill in
+/// as each time window actually elapses — there is no way to backfill a
+/// 365-day return before 365 days have passed, so these are legitimately
+/// null until then rather than estimated. Because Atlas never executes
+/// trades, "outcome" and "what happens if you take no action" are the same
+/// realized price path — there's no alternate universe to compare against,
+/// so alpha vs. SPY is the primary value-add signal.
+model RecommendationOutcome {
+  id                    String            @id @default(cuid())
+  recommendationId      String            @unique
+  recommendation        Recommendation    @relation(fields: [recommendationId], references: [id])
+  symbol                String
+  action                RecommendedAction
+  confidenceScore       Int
+  recommendedAt         DateTime
+  priceAtRecommendation Decimal
+  sp500AtRecommendation Decimal
+  return30d             Float?
+  return90d             Float?
+  return180d            Float?
+  return365d            Float?
+  sp500Return30d        Float?
+  sp500Return90d        Float?
+  sp500Return180d       Float?
+  sp500Return365d       Float?
+  alpha30d              Float?
+  alpha90d              Float?
+  alpha180d             Float?
+  alpha365d             Float?
+  lastEvaluatedAt       DateTime          @default(now())
+
   @@index([symbol])
 }

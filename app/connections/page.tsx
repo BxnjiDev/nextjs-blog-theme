@@ -57,13 +57,32 @@ export default async function ConnectionsPage() {
   const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
   const hasCronSecret = Boolean(process.env.CRON_SECRET);
 
-  const [db, edgar, latestSnapshot, latestRecommendation, latestBriefing, latestFilingAlert] = await Promise.all([
+  const [
+    db,
+    edgar,
+    latestSnapshot,
+    latestRecommendation,
+    latestBriefing,
+    latestFilingAlert,
+    latestNewsItem,
+    latestRisk,
+    latestThesisReview,
+    latestHealth,
+    latestOutcome,
+    latestOpportunityComparison,
+  ] = await Promise.all([
     checkDb(),
     checkEdgarReachable(),
     prisma.performanceSnapshot.findFirst({ orderBy: { date: 'desc' } }),
     prisma.recommendation.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.briefing.findFirst({ orderBy: { date: 'desc' } }),
     prisma.alert.findFirst({ where: { type: 'NEW_SEC_FILING' }, orderBy: { createdAt: 'desc' } }),
+    prisma.newsItem.findFirst({ orderBy: { createdAt: 'desc' } }),
+    prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.thesis.findFirst({ orderBy: { lastReviewedAt: 'desc' } }),
+    prisma.portfolioHealthAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.recommendationOutcome.findFirst({ orderBy: { lastEvaluatedAt: 'desc' } }),
+    prisma.opportunityComparison.findFirst({ orderBy: { generatedAt: 'desc' } }),
   ]);
 
   return (
@@ -99,6 +118,36 @@ export default async function ConnectionsPage() {
             label="Last SEC filing alert"
             ok={Boolean(latestFilingAlert)}
             detail={latestFilingAlert ? latestFilingAlert.createdAt.toLocaleString() : 'None yet'}
+          />
+          <HealthRow
+            label="Last news item stored"
+            ok={Boolean(latestNewsItem)}
+            detail={latestNewsItem ? latestNewsItem.createdAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last risk assessment"
+            ok={Boolean(latestRisk)}
+            detail={latestRisk ? latestRisk.generatedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last thesis review"
+            ok={Boolean(latestThesisReview)}
+            detail={latestThesisReview ? latestThesisReview.lastReviewedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last portfolio health score"
+            ok={Boolean(latestHealth)}
+            detail={latestHealth ? latestHealth.generatedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last outcome evaluation"
+            ok={Boolean(latestOutcome)}
+            detail={latestOutcome ? latestOutcome.lastEvaluatedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last opportunity comparison"
+            ok={Boolean(latestOpportunityComparison)}
+            detail={latestOpportunityComparison ? latestOpportunityComparison.generatedAt.toLocaleString() : 'Never run'}
           />
         </div>
         {!hasCronSecret && (
@@ -165,12 +214,19 @@ export default async function ConnectionsPage() {
 
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
-            <h2 className="font-medium">Financial news</h2>
+            <h2 className="font-medium">Financial news — Finnhub (company, sector &amp; market coverage)</h2>
             <StatusPill ok={hasNewsKey} label={hasNewsKey ? 'Key configured' : 'Mock data (empty feed)'} />
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">NEWS_API_KEY</code> and implement a
-            real provider in <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/news.ts</code>.
+            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">NEWS_API_KEY</code> with a{' '}
+            <a href="https://finnhub.io" className="underline" target="_blank" rel="noreferrer">
+              Finnhub
+            </a>{' '}
+            key. Sentiment and materiality are computed deterministically from the real fetched text (see{' '}
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/newsScoring.ts</code>) — never
+            invented. Sector coverage (AI, semiconductors, defense, aerospace, robotics, data centers, energy,
+            cybersecurity) is sourced via representative sector-ETF company news, documented in{' '}
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/news.ts</code>.
           </p>
         </div>
 

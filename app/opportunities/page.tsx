@@ -11,9 +11,22 @@ const categoryLabels: Record<string, string> = {
   COMPOUNDER: 'Long-term compounder',
 };
 
+const edgeLabels: Record<string, string> = {
+  FAVORS_OPPORTUNITY: 'Favors this opportunity',
+  FAVORS_HOLDING: 'Favors your current holding',
+  NEUTRAL: 'Evenly matched',
+};
+
+const edgeStyles: Record<string, string> = {
+  FAVORS_OPPORTUNITY: 'text-risk-low',
+  FAVORS_HOLDING: 'text-risk-high',
+  NEUTRAL: 'text-gray-500',
+};
+
 export default async function OpportunitiesPage() {
   const opportunities = await prisma.opportunity.findMany({
     where: { dismissedAt: null },
+    include: { comparisons: { orderBy: { generatedAt: 'desc' }, take: 1 } },
     orderBy: { identifiedAt: 'desc' },
   });
 
@@ -46,6 +59,17 @@ export default async function OpportunitiesPage() {
               <ConfidenceBadge score={o.confidenceScore} />
             </div>
             <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">{o.thesis}</p>
+
+            {o.comparisons[0] && (
+              <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <p className={`text-xs font-medium ${edgeStyles[o.comparisons[0].overallEdge]}`}>
+                  vs. {o.comparisons[0].comparedToSymbol}: {edgeLabels[o.comparisons[0].overallEdge]}
+                </p>
+                <pre className="mt-1 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
+                  {o.comparisons[0].narrative}
+                </pre>
+              </div>
+            )}
           </div>
         ))}
       </div>

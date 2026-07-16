@@ -70,22 +70,8 @@ async function main() {
     },
   });
 
-  await prisma.riskAssessment.upsert({
-    where: { id: 'seed-risk-1' },
-    update: {},
-    create: {
-      id: 'seed-risk-1',
-      concentrationRisk: 55,
-      sectorRisk: 60,
-      valuationRisk: 50,
-      earningsRisk: 40,
-      regulatoryRisk: 35,
-      liquidityRisk: 10,
-      macroRisk: 45,
-      overallScore: 45,
-      notes: 'Sample risk snapshot from seed data — recompute once real holdings/prices are synced.',
-    },
-  });
+  // RiskAssessment is no longer seeded — lib/jobs/generateRiskAssessment.ts
+  // computes it for real from the holdings above once the app runs.
 
   console.log('Seed complete:', { account: account.externalId, holdings: holdings.length });
 }

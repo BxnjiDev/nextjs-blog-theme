@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import { marketDataProvider, secFilingsProvider, newsProvider, aiReasoningProvider } from '@/lib/integrations';
+import { marketDataProvider, secFilingsProvider, aiReasoningProvider } from '@/lib/integrations';
+import { getStoredNews, toNewsArticle } from '@/lib/domain/news';
 
 /** Idempotency window: re-running the job within this many hours of the last
  * analysis for a holding is a no-op for that holding, so a retried or
@@ -37,13 +38,14 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
     }
 
     try {
-      const [quote, technicals, fundamentals, filings, news] = await Promise.all([
+      const [quote, technicals, fundamentals, filings, storedNews] = await Promise.all([
         marketDataProvider.getQuote(holding.symbol),
         marketDataProvider.getTechnicals(holding.symbol),
         marketDataProvider.getFundamentals(holding.symbol),
         secFilingsProvider.getRecentFilings(holding.symbol, 5),
-        newsProvider.getNewsForSymbol(holding.symbol, 24 * 7),
+        getStoredNews({ symbol: holding.symbol, sinceHours: 24 * 7 }),
       ]);
+      const news = storedNews.map(toNewsArticle);
 
       const analysis = await aiReasoningProvider.analyzeHolding({
         symbol: holding.symbol,

@@ -59,20 +59,53 @@ export interface MarketDataProvider {
   getSp500History(days?: number): Promise<HistoricalPricePoint[]>;
 }
 
+export type MaterialityLevel = 'critical' | 'high' | 'medium' | 'low';
+
+/** Broad sector/topic categories the news layer covers beyond per-holding company news. */
+export type SectorTopic =
+  | 'ai'
+  | 'semiconductors'
+  | 'defense'
+  | 'aerospace'
+  | 'robotics'
+  | 'data_centers'
+  | 'energy'
+  | 'cybersecurity'
+  | 'macro';
+
 export interface NewsArticle {
+  /** Primary ticker this story is filed under, if any. */
   symbol?: string;
+  /** Every ticker this story is associated with (a story can name several). */
+  tickers: string[];
   headline: string;
   summary?: string;
   source: string;
   url?: string;
   publishedAt: Date;
-  /** 1-10: how likely this is to matter to a holder of `symbol`. */
+  /** 1-10 fine-grained materiality score. */
   materiality: number;
+  materialityLevel: MaterialityLevel;
+  /** 0-100: how relevant this is to the CURRENT portfolio's actual exposure. */
+  relevanceScore: number;
+  /** -1 (very negative) to 1 (very positive) from a deterministic keyword
+   * lexicon over the real fetched text — null when no lexicon term matched
+   * (never a guessed/neutral-by-default number). */
+  sentiment: number | null;
+  quality: DataQuality;
+  /** Stable key for cross-run/cross-source dedup (URL, or normalized headline+date). */
+  dedupeKey: string;
+}
+
+/** Portfolio context a news query needs to score relevance against real exposure. */
+export interface NewsQueryContext {
+  heldSymbols: string[];
 }
 
 export interface NewsProvider {
-  getNewsForSymbol(symbol: string, sinceHours?: number): Promise<NewsArticle[]>;
-  getMarketNews(sinceHours?: number): Promise<NewsArticle[]>;
+  getNewsForSymbol(symbol: string, context: NewsQueryContext, sinceHours?: number): Promise<NewsArticle[]>;
+  getMarketNews(context: NewsQueryContext, sinceHours?: number): Promise<NewsArticle[]>;
+  getSectorNews(topic: SectorTopic, context: NewsQueryContext, sinceHours?: number): Promise<NewsArticle[]>;
 }
 
 export interface SecFiling {

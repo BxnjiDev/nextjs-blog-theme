@@ -3,6 +3,7 @@ import { getPortfolioOverview } from '@/lib/domain/portfolio';
 import { formatCurrency, formatPercent } from '@/lib/format';
 import StatCard from '@/components/StatCard';
 import DataQualityBadge from '@/components/DataQualityBadge';
+import AllocationDonut from '@/components/charts/AllocationDonut';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,6 +80,48 @@ export default async function OverviewPage() {
           ) : (
             <p className="mt-2 text-sm text-gray-500">No holdings.</p>
           )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <h2 className="mb-2 text-sm font-medium text-gray-500 dark:text-gray-400">Allocation</h2>
+          <div className="flex items-center gap-4">
+            <div className="w-full max-w-[220px]">
+              <AllocationDonut
+                data={[
+                  ...overview.holdings.map((h) => ({
+                    label: h.symbol,
+                    value: overview.totalValue > 0 ? (h.marketValue / overview.totalValue) * 100 : 0,
+                  })),
+                  ...(overview.cashBalance > 0
+                    ? [{ label: 'Cash', value: (overview.cashBalance / overview.totalValue) * 100 }]
+                    : []),
+                ]}
+              />
+            </div>
+            <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+              {overview.holdings.map((h) => (
+                <li key={h.symbol}>
+                  {h.symbol}: {overview.totalValue > 0 ? ((h.marketValue / overview.totalValue) * 100).toFixed(1) : '0.0'}%
+                </li>
+              ))}
+              {overview.cashBalance > 0 && (
+                <li>Cash: {overview.totalValue > 0 ? ((overview.cashBalance / overview.totalValue) * 100).toFixed(1) : '0.0'}%</li>
+              )}
+            </ul>
+          </div>
+        </div>
+        <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-400">
+          Deeper analysis lives on the{' '}
+          <Link href="/intelligence" className="underline">
+            Intelligence
+          </Link>{' '}
+          and{' '}
+          <Link href="/health" className="underline">
+            Health
+          </Link>{' '}
+          pages — per-holding conviction trend, thesis history, and a full portfolio health breakdown.
         </div>
       </div>
 

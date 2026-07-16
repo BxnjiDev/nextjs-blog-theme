@@ -2,7 +2,32 @@ import { prisma } from '@/lib/prisma';
 import { getPortfolioOverview } from '@/lib/domain/portfolio';
 import { getPerformanceSummary } from '@/lib/domain/performance';
 import { todayUtcDateOnly } from '@/lib/domain/date';
-import { newsProvider, secFilingsProvider } from '@/lib/integrations';
+import { secFilingsProvider } from '@/lib/integrations';
+import { getStoredNews } from '@/lib/domain/news';
+import type { NewsItem } from '@prisma/client';
+
+/** Deterministic, evidence-grounded explanation of why a stored news item
+ * matters to the portfolio — not an AI-generated rationale, just a plain
+ * statement of the facts that made it qualify (materiality, exposure). */
+function explainNewsRelevance(item: NewsItem, heldSymbols: string[]): string {
+  const tickers = Array.isArray(item.tickers) ? (item.tickers as string[]) : [];
+  const heldMentions = tickers.filter((t) => heldSymbols.includes(t));
+  const parts: string[] = [];
+
+  if (item.symbol && heldSymbols.includes(item.symbol)) {
+    parts.push(`Directly about your ${item.symbol} position.`);
+  } else if (heldMentions.length > 0) {
+    parts.push(`Mentions holding(s): ${heldMentions.join(', ')}.`);
+  } else {
+    parts.push('Sector/macro coverage relevant to your holdings.');
+  }
+
+  parts.push(`Materiality: ${item.materialityLevel.toLowerCase()}.`);
+  if (item.sentiment !== null) {
+    parts.push(`Sentiment: ${item.sentiment > 0 ? 'positive' : item.sentiment < 0 ? 'negative' : 'neutral'} (${item.sentiment.toFixed(2)}).`);
+  }
+  return parts.join(' ');
+}
 
 export interface BriefingJobResult {
   created: boolean;
@@ -29,10 +54,12 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
     return { created: false, reason: 'No account connected yet.' };
   }
 
-  const [overview, performance, risk] = await Promise.all([
+  const [overview, performance, risk, health, theses] = await Promise.all([
     getPortfolioOverview(),
     getPerformanceSummary(),
     prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.portfolioHealthAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.thesis.findMany({ where: { holding: { accountId: account.id } } }),
   ]);
 
   const recommendedActions = account.holdings.map((h) => {
@@ -44,6 +71,10 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
       generatedAt: rec?.generatedAt.toISOString() ?? null,
     };
   });
+
+  const convictionHighlights = theses
+    .map((t) => ({ symbol: t.symbol, convictionScore: t.convictionScore, lastReviewedAt: t.lastReviewedAt.toISOString() }))
+    .sort((a, b) => a.convictionScore - b.convictionScore);
 
   const portfolioSummary = {
     totalValue: overview?.totalValue ?? null,
@@ -59,21 +90,33 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
       : null,
     performance,
     recommendedActions,
-    materialRisks: risk ? { overallScore: risk.overallScore, notes: risk.notes } : null,
+    convictionHighlights,
+    materialRisks: risk
+      ? { overallScore: risk.overallScore, previousScore: risk.previousScore, notes: risk.notes, explanation: risk.explanation }
+      : null,
+    portfolioHealth: health
+      ? { overallScore: health.overallScore, previousScore: health.previousScore, topConcerns: health.topConcerns, topImprovements: health.topImprovements }
+      : null,
   };
 
-  const perHoldingNews = await Promise.all(
-    account.holdings.map((h) => newsProvider.getNewsForSymbol(h.symbol, 24))
-  );
-  const marketNews = await newsProvider.getMarketNews(24);
-  const portfolioNews = [...perHoldingNews.flat(), ...marketNews].map((n) => ({
-    symbol: n.symbol ?? null,
-    headline: n.headline,
-    source: n.source,
-    url: n.url ?? null,
-    publishedAt: n.publishedAt.toISOString(),
-    materiality: n.materiality,
-  }));
+  const heldSymbols = account.holdings.map((h) => h.symbol);
+  // Only meaningful stories (medium materiality or above) make the briefing —
+  // "low" items are stored for the record but not surfaced here.
+  const storedNews = await getStoredNews({ sinceHours: 48, limit: 30 });
+  const portfolioNews = storedNews
+    .filter((n) => n.materialityLevel !== 'LOW')
+    .map((n) => ({
+      symbol: n.symbol ?? null,
+      tickers: Array.isArray(n.tickers) ? n.tickers : [],
+      headline: n.headline,
+      source: n.source,
+      url: n.url ?? null,
+      publishedAt: n.publishedAt.toISOString(),
+      materiality: n.materiality,
+      materialityLevel: n.materialityLevel,
+      sentiment: n.sentiment,
+      whyItMatters: explainNewsRelevance(n, heldSymbols),
+    }));
 
   const upcomingEvents = await Promise.all(
     account.holdings.map(async (h) => {

@@ -1,5 +1,24 @@
-export default function RiskGauge({ label, score }: { label: string; score: number }) {
-  const tone = score >= 66 ? 'bg-risk-high' : score >= 33 ? 'bg-risk-medium' : 'bg-risk-low';
+export default function RiskGauge({
+  label,
+  score,
+  invert = false,
+}: {
+  label: string;
+  score: number;
+  /** Set true when higher = better (e.g. a health score) instead of higher = riskier. */
+  invert?: boolean;
+}) {
+  const tone = invert
+    ? score >= 66
+      ? 'bg-risk-low'
+      : score >= 33
+        ? 'bg-risk-medium'
+        : 'bg-risk-high'
+    : score >= 66
+      ? 'bg-risk-high'
+      : score >= 33
+        ? 'bg-risk-medium'
+        : 'bg-risk-low';
 
   return (
     <div>
