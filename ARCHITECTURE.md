@@ -19,7 +19,7 @@ Robinhood Agentic Trading (MCP)  --agent reports-->  lib/integrations/robinhood.
 Market data provider (Twelve Data) -->  lib/integrations/marketData.ts             -->  quotes/technicals/fundamentals/history
 News provider                     -->  lib/integrations/news.ts                     -->  NewsArticle (mock: empty feed, not fabricated)
 SEC EDGAR (public, no key)         -->  lib/integrations/secFilings.ts               -->  recent filings, fetched live
-AI reasoning (Claude, claude-opus-4-8) -> lib/integrations/aiReasoning.ts            -->  structured per-holding analysis
+AI reasoning (Claude, model via ANTHROPIC_MODEL) -> lib/integrations/aiReasoning.ts  -->  structured per-holding analysis
 
 lib/jobs/refreshPortfolio.ts        -->  PerformanceSnapshot (one row/day, upserted)
 lib/jobs/monitorFilings.ts          -->  Alert (NEW_SEC_FILING, deduped by dedupeKey)
@@ -53,7 +53,7 @@ the agent's MCP session confirms a fill).
 | --- | --- |
 | SEC EDGAR filings | **Real** — public API, no key, `secFilings.ts` |
 | Market data (quotes, historical, fundamentals) | **Real** — Twelve Data, one API key (`MARKET_DATA_API_KEY`), `marketData.ts`. Mock (clearly-fake numbers) when the key is unset, and falls back per-call to mock if a configured key errors or rate-limits. Quotes are labeled `delayed`, never `live` — the free tier isn't guaranteed real-time. |
-| AI reasoning (thesis/bull/bear/risk) | **Real** — Claude (`claude-opus-4-8`, structured output) when `ANTHROPIC_API_KEY` is set, `aiReasoning.ts`. Falls back to a deterministic, clearly-labeled data summary (no fabricated thesis) when unset or on failure. |
+| AI reasoning (thesis/bull/bear/risk) | **Real** — Claude (structured output, model via `ANTHROPIC_MODEL`, default `claude-opus-4-8`) when `ANTHROPIC_API_KEY` is set, `aiReasoning.ts`. Model is validated at startup — see `anthropicModel.ts`. Falls back to a deterministic, clearly-labeled data summary (no fabricated thesis) when unset or on failure. |
 | Financial news | **Mock** — returns an empty feed rather than invented headlines, `news.ts` |
 | Robinhood account/holdings | **Mock seed data** until an agent session syncs a real account |
 

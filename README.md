@@ -10,7 +10,8 @@ connector) is deliberately kept out of the app's own credentials.
 ## Stack
 
 Next.js 14 (App Router) · TypeScript · Tailwind CSS · PostgreSQL · Prisma ·
-Twelve Data (market data) · Claude (`claude-opus-4-8`, AI reasoning)
+Twelve Data (market data) · Claude (AI reasoning — model configurable via
+`ANTHROPIC_MODEL`, defaults to `claude-opus-4-8`)
 
 ## Getting started
 
@@ -57,6 +58,7 @@ providers when unset, never fabricating data in their place.
 | `DATABASE_URL` | Postgres connection string (required) |
 | `MARKET_DATA_API_KEY` | Twelve Data key — quotes, historical prices, fundamentals |
 | `ANTHROPIC_API_KEY` | Claude API key — real per-holding thesis/bull/bear/risk analysis |
+| `ANTHROPIC_MODEL` | Claude model ID (optional, defaults to `claude-opus-4-8`). Validated at startup against the models the installed `@anthropic-ai/sdk` recognizes — an unsupported value fails immediately with a clear error. See `lib/integrations/anthropicModel.ts` for the current supported list. |
 | `NEWS_API_KEY` | Not yet wired to a vendor; reserved |
 | `SEC_EDGAR_USER_AGENT` | Contact info for SEC's fair-access policy (EDGAR itself needs no key) |
 | `CRON_SECRET` | Required for `/api/jobs/*` routes to run |

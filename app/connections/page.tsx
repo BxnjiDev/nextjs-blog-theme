@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { resolveAnthropicModel } from '@/lib/integrations';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,11 +148,17 @@ export default async function ConnectionsPage() {
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <h2 className="font-medium">AI reasoning — Claude (recommendation generation)</h2>
-            <StatusPill ok={hasAnthropicKey} label={hasAnthropicKey ? 'Claude configured' : 'Heuristic fallback'} />
+            <StatusPill
+              ok={hasAnthropicKey}
+              label={hasAnthropicKey ? `Claude configured (${resolveAnthropicModel()})` : 'Heuristic fallback'}
+            />
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ANTHROPIC_API_KEY</code> to generate
-            real thesis/bull/bear/risk analysis (claude-opus-4-8, structured output). Without it, the
+            real thesis/bull/bear/risk analysis (structured output). Model is configured via{' '}
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ANTHROPIC_MODEL</code> (default{' '}
+            claude-opus-4-8) and validated at startup — an unsupported value fails immediately with a
+            clear error rather than a confusing failure deep in a background job. Without a key, the
             recommendation job stores a clearly-labeled data summary instead of fabricated analysis.
           </p>
         </div>

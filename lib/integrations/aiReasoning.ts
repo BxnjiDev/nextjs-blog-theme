@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import type { CompanyFundamentals, NewsArticle, Quote, SecFiling, Technicals } from './types';
+import { resolveAnthropicModel, type SupportedAnthropicModel } from './anthropicModel';
 
 const HoldingAnalysisSchema = z.object({
   thesis: z.string().describe('Current investment thesis in 2-4 sentences, grounded only in the data provided.'),
@@ -111,18 +112,21 @@ function buildUserPrompt(input: HoldingAnalysisInput): string {
 }
 
 /**
- * REAL implementation — calls Claude (claude-opus-4-8) with structured
- * outputs so the response is guaranteed to match HoldingAnalysisSchema.
- * Adaptive thinking is left on so the model can reason through the
- * synthesis when it judges that useful; effort is capped at "medium" since
- * this runs per-holding in a batch job, not an interactive chat.
+ * REAL implementation — calls Claude (model configured via ANTHROPIC_MODEL,
+ * see anthropicModel.ts) with structured outputs so the response is
+ * guaranteed to match HoldingAnalysisSchema. Adaptive thinking is left on so
+ * the model can reason through the synthesis when it judges that useful;
+ * effort is capped at "medium" since this runs per-holding in a batch job,
+ * not an interactive chat.
  */
 class ClaudeAiReasoningProvider implements AiReasoningProvider {
   private client = new Anthropic();
 
+  constructor(private readonly model: SupportedAnthropicModel) {}
+
   async analyzeHolding(input: HoldingAnalysisInput): Promise<HoldingAnalysisOutput> {
     const response = await this.client.messages.parse({
-      model: 'claude-opus-4-8',
+      model: this.model,
       max_tokens: 4096,
       thinking: { type: 'adaptive' },
       output_config: {
@@ -204,6 +208,19 @@ class FallbackAiReasoningProvider implements AiReasoningProvider {
 
 const heuristicProvider = new HeuristicAiReasoningProvider();
 
-export const aiReasoningProvider: AiReasoningProvider = process.env.ANTHROPIC_API_KEY
-  ? new FallbackAiReasoningProvider(new ClaudeAiReasoningProvider(), heuristicProvider)
-  : heuristicProvider;
+/**
+ * Resolving the model happens eagerly, at module load, only when Claude is
+ * actually going to be used (ANTHROPIC_API_KEY set). An unsupported
+ * ANTHROPIC_MODEL throws immediately with an actionable message instead of
+ * surfacing as a confusing 404 from Anthropic deep inside a background job.
+ * If no key is configured, the model setting is irrelevant — heuristic mode
+ * doesn't call Claude at all — so it's intentionally not validated then.
+ */
+function createAiReasoningProvider(): AiReasoningProvider {
+  if (!process.env.ANTHROPIC_API_KEY) return heuristicProvider;
+
+  const model: SupportedAnthropicModel = resolveAnthropicModel();
+  return new FallbackAiReasoningProvider(new ClaudeAiReasoningProvider(model), heuristicProvider);
+}
+
+export const aiReasoningProvider: AiReasoningProvider = createAiReasoningProvider();
