@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider } from '@/lib/integrations';
+import type { DataQuality } from '@/lib/integrations';
 
 export interface HoldingView {
   id: string;
@@ -13,6 +14,8 @@ export interface HoldingView {
   marketValue: number;
   unrealizedPnl: number;
   unrealizedPnlPercent: number;
+  quoteAsOf: Date;
+  quoteQuality: DataQuality;
 }
 
 export interface PortfolioOverview {
@@ -24,6 +27,7 @@ export interface PortfolioOverview {
   holdings: HoldingView[];
   largestWinner: HoldingView | null;
   largestLoser: HoldingView | null;
+  asOf: Date;
 }
 
 /**
@@ -61,6 +65,8 @@ export async function getPortfolioOverview(): Promise<PortfolioOverview | null> 
       marketValue,
       unrealizedPnl: marketValue - costBasisValue,
       unrealizedPnlPercent: costBasisValue === 0 ? 0 : (marketValue - costBasisValue) / costBasisValue,
+      quoteAsOf: quote?.asOf ?? h.updatedAt,
+      quoteQuality: quote?.quality ?? 'mock',
     };
   });
 
@@ -85,5 +91,6 @@ export async function getPortfolioOverview(): Promise<PortfolioOverview | null> 
     holdings,
     largestWinner: sorted[0] ?? null,
     largestLoser: sorted[sorted.length - 1] ?? null,
+    asOf: new Date(),
   };
 }

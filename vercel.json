@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/api/jobs/refresh", "schedule": "*/30 13-20 * * 1-5" },
+    { "path": "/api/jobs/monitor", "schedule": "0 */2 * * *" },
+    { "path": "/api/jobs/recommendations", "schedule": "0 11 * * *" },
+    { "path": "/api/jobs/briefing", "schedule": "30 11 * * *" }
+  ]
+}

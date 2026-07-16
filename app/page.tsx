@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getPortfolioOverview } from '@/lib/domain/portfolio';
 import { formatCurrency, formatPercent } from '@/lib/format';
 import StatCard from '@/components/StatCard';
+import DataQualityBadge from '@/components/DataQualityBadge';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,7 @@ export default async function OverviewPage() {
           <Link href="/connections" className="underline">
             Connections
           </Link>
-          .
+          . Rendered {overview.asOf.toLocaleString()}.
         </p>
       </div>
 
@@ -93,6 +94,7 @@ export default async function OverviewPage() {
                 <th className="px-4 py-2">Day %</th>
                 <th className="px-4 py-2">Market value</th>
                 <th className="px-4 py-2">Unrealized P&L</th>
+                <th className="px-4 py-2">Data</th>
               </tr>
             </thead>
             <tbody>
@@ -109,6 +111,9 @@ export default async function OverviewPage() {
                   <td className="px-4 py-2">{formatCurrency(h.marketValue)}</td>
                   <td className={`px-4 py-2 ${h.unrealizedPnl >= 0 ? 'text-risk-low' : 'text-risk-high'}`}>
                     {formatCurrency(h.unrealizedPnl)} ({formatPercent(h.unrealizedPnlPercent * 100)})
+                  </td>
+                  <td className="px-4 py-2">
+                    <DataQualityBadge quality={h.quoteQuality} asOf={h.quoteAsOf} />
                   </td>
                 </tr>
               ))}

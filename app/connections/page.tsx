@@ -1,4 +1,29 @@
+import { prisma } from '@/lib/prisma';
+
 export const dynamic = 'force-dynamic';
+
+async function checkDb(): Promise<{ ok: boolean; detail: string }> {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return { ok: true, detail: 'Connected' };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function checkEdgarReachable(): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const res = await fetch('https://www.sec.gov/files/company_tickers.json', {
+      headers: {
+        'User-Agent': process.env.SEC_EDGAR_USER_AGENT || 'Atlas Portfolio Agent (set SEC_EDGAR_USER_AGENT)',
+      },
+      cache: 'no-store',
+    });
+    return { ok: res.ok, detail: res.ok ? 'Reachable' : `HTTP ${res.status}` };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -12,19 +37,76 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-export default function ConnectionsPage() {
+function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+  return (
+    <div className="flex items-center justify-between rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+      <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 dark:text-gray-400">{detail}</span>
+        <span className={`h-2 w-2 rounded-full ${ok ? 'bg-risk-low' : 'bg-risk-high'}`} />
+      </div>
+    </div>
+  );
+}
+
+export default async function ConnectionsPage() {
   const hasMarketDataKey = Boolean(process.env.MARKET_DATA_API_KEY);
   const hasNewsKey = Boolean(process.env.NEWS_API_KEY);
   const hasEdgarUserAgent = Boolean(process.env.SEC_EDGAR_USER_AGENT);
+  const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasCronSecret = Boolean(process.env.CRON_SECRET);
+
+  const [db, edgar, latestSnapshot, latestRecommendation, latestBriefing, latestFilingAlert] = await Promise.all([
+    checkDb(),
+    checkEdgarReachable(),
+    prisma.performanceSnapshot.findFirst({ orderBy: { date: 'desc' } }),
+    prisma.recommendation.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.briefing.findFirst({ orderBy: { date: 'desc' } }),
+    prisma.alert.findFirst({ where: { type: 'NEW_SEC_FILING' }, orderBy: { createdAt: 'desc' } }),
+  ]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Connections</h1>
+        <h1 className="text-2xl font-semibold">Connections &amp; Health</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          What Atlas is actually reading data from right now, versus placeholders.
+          What Atlas is actually connected to right now, and when each background job last ran.
         </p>
       </div>
+
+      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+        <h2 className="mb-3 font-medium">System health</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <HealthRow label="Database" ok={db.ok} detail={db.detail} />
+          <HealthRow label="SEC EDGAR reachability" ok={edgar.ok} detail={edgar.detail} />
+          <HealthRow
+            label="Last portfolio refresh"
+            ok={Boolean(latestSnapshot)}
+            detail={latestSnapshot ? latestSnapshot.date.toLocaleDateString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last recommendation generated"
+            ok={Boolean(latestRecommendation)}
+            detail={latestRecommendation ? latestRecommendation.generatedAt.toLocaleString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last briefing"
+            ok={Boolean(latestBriefing)}
+            detail={latestBriefing ? latestBriefing.date.toLocaleDateString() : 'Never run'}
+          />
+          <HealthRow
+            label="Last SEC filing alert"
+            ok={Boolean(latestFilingAlert)}
+            detail={latestFilingAlert ? latestFilingAlert.createdAt.toLocaleString() : 'None yet'}
+          />
+        </div>
+        {!hasCronSecret && (
+          <p className="mt-3 text-xs text-risk-medium">
+            CRON_SECRET is not set — the /api/jobs/* routes will refuse every request (including
+            Vercel Cron) until it&rsquo;s configured.
+          </p>
+        )}
+      </section>
 
       <div className="space-y-4">
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
@@ -49,13 +131,28 @@ export default function ConnectionsPage() {
 
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
-            <h2 className="font-medium">Market data (quotes, technicals)</h2>
+            <h2 className="font-medium">Market data — Twelve Data (quotes, historical, fundamentals)</h2>
             <StatusPill ok={hasMarketDataKey} label={hasMarketDataKey ? 'Key configured' : 'Mock data'} />
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">MARKET_DATA_API_KEY</code> and
-            implement a real provider in{' '}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/marketData.ts</code>.
+            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">MARKET_DATA_API_KEY</code> with a{' '}
+            <a href="https://twelvedata.com" className="underline" target="_blank" rel="noreferrer">
+              Twelve Data
+            </a>{' '}
+            key. Quotes are labeled &ldquo;Delayed&rdquo; (not real-time) even when live. A configured key that
+            errors mid-request falls back to mock data for that call only, logged server-side.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <h2 className="font-medium">AI reasoning — Claude (recommendation generation)</h2>
+            <StatusPill ok={hasAnthropicKey} label={hasAnthropicKey ? 'Claude configured' : 'Heuristic fallback'} />
+          </div>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ANTHROPIC_API_KEY</code> to generate
+            real thesis/bull/bear/risk analysis (claude-opus-4-8, structured output). Without it, the
+            recommendation job stores a clearly-labeled data summary instead of fabricated analysis.
           </p>
         </div>
 
@@ -73,12 +170,14 @@ export default function ConnectionsPage() {
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <h2 className="font-medium">SEC EDGAR filings</h2>
-            <StatusPill ok={true} label="Live (public API)" />
+            <StatusPill ok={edgar.ok} label={edgar.ok ? 'Live (public API)' : 'Unreachable'} />
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Already implemented against the real public EDGAR API — no key required, just a
             contact User-Agent.{' '}
-            {hasEdgarUserAgent ? 'A custom User-Agent is configured.' : 'Set SEC_EDGAR_USER_AGENT with a real contact email before relying on this in production.'}
+            {hasEdgarUserAgent
+              ? 'A custom User-Agent is configured.'
+              : 'Set SEC_EDGAR_USER_AGENT with a real contact email before relying on this in production.'}
           </p>
         </div>
       </div>

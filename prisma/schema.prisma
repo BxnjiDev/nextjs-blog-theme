@@ -68,6 +68,7 @@ enum AlertType {
   ACCOUNTING_CONCERN
   NEW_OPPORTUNITY
   BETTER_RISK_REWARD
+  NEW_SEC_FILING
 }
 
 enum AlertSeverity {
@@ -192,12 +193,17 @@ model Recommendation {
   institutionalSentiment String?
   confidenceScore        Int // 1-10
   action                 RecommendedAction
+  /// Per-source freshness/quality metadata captured at generation time
+  /// (quote/fundamentals asOf + quality, filing count, news count) — lets
+  /// the dashboard show exactly how current an analysis is.
+  sourcesMeta            Json?
   previousId             String?           @unique
   previous               Recommendation?   @relation("RecommendationHistory", fields: [previousId], references: [id])
   next                   Recommendation?   @relation("RecommendationHistory")
   generatedAt            DateTime          @default(now())
 
   @@index([symbol, generatedAt])
+  @@index([holdingId, generatedAt])
 }
 
 /// Candidates not currently held — the "Opportunities" surface.
@@ -261,7 +267,10 @@ model NewsItem {
   @@index([symbol, publishedAt])
 }
 
-/// A surfaced alert per the spec's "Alerts" section.
+/// A surfaced alert per the spec's "Alerts" section. `dedupeKey` (e.g.
+/// `sec:{symbol}:{accessionNumber}`) is how monitoring jobs stay idempotent —
+/// insert-if-not-exists on that key instead of re-alerting the same event
+/// every time the job runs.
 model Alert {
   id              String        @id @default(cuid())
   type            AlertType
@@ -270,6 +279,7 @@ model Alert {
   message         String
   evidence        String?
   confidenceScore Int // 1-10
+  dedupeKey       String?       @unique
   createdAt       DateTime      @default(now())
   acknowledgedAt  DateTime?
 

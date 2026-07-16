@@ -52,6 +52,9 @@ export default async function HoldingsPage() {
                   <div className="flex flex-col items-end gap-1">
                     <ActionBadge action={rec.action} />
                     <ConfidenceBadge score={rec.confidenceScore} />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Generated {rec.generatedAt.toLocaleString()}
+                    </span>
                   </div>
                 )}
               </div>

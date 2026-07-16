@@ -5,12 +5,16 @@
  * one-file change, not a rewrite of the pages that consume it.
  */
 
+/** live = true real-time tick, delayed = real vendor data on a delay, mock = placeholder. */
+export type DataQuality = 'live' | 'delayed' | 'mock';
+
 export interface Quote {
   symbol: string;
   price: number;
   changePercent: number;
   volume: number;
   asOf: Date;
+  quality: DataQuality;
 }
 
 export type Trend = 'UP' | 'DOWN' | 'SIDEWAYS';
@@ -19,14 +23,40 @@ export interface Technicals {
   symbol: string;
   trend: Trend;
   notes: string;
+  asOf: Date;
+  quality: DataQuality;
+}
+
+export interface HistoricalPricePoint {
+  date: Date;
+  close: number;
+  volume: number;
+}
+
+export interface CompanyFundamentals {
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  marketCap: number | null;
+  peRatio: number | null;
+  eps: number | null;
+  dividendYield: number | null;
+  description: string | null;
+  asOf: Date;
+  quality: DataQuality;
 }
 
 export interface MarketDataProvider {
   getQuote(symbol: string): Promise<Quote>;
   getQuotes(symbols: string[]): Promise<Quote[]>;
   getTechnicals(symbol: string): Promise<Technicals>;
-  /** Latest S&P 500 index level, used for benchmark comparisons. */
+  getHistoricalDaily(symbol: string, days?: number): Promise<HistoricalPricePoint[]>;
+  /** Returns null when fundamentals genuinely can't be determined — never a guess. */
+  getFundamentals(symbol: string): Promise<CompanyFundamentals | null>;
+  /** Latest S&P 500 level (tracked via the SPY ETF as a proxy). */
   getSp500Level(): Promise<number>;
+  getSp500History(days?: number): Promise<HistoricalPricePoint[]>;
 }
 
 export interface NewsArticle {
