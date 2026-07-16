@@ -1,0 +1,307 @@
+// Atlas portfolio intelligence data model.
+//
+// Design notes:
+// - This schema is the system of record for Atlas's OWN analysis (recommendations,
+//   risk scores, briefings, trade proposals). It is NOT a cache of brokerage truth —
+//   Account/Holding/Transaction rows are synced FROM the connected brokerage
+//   (Robinhood Agentic Trading, via its MCP server) and should be treated as
+//   read-mostly mirrors, not edited directly by app logic.
+// - TradeProposal is the only path to order placement. Nothing in this schema
+//   represents "fire and forget" autonomous execution: every row starts at
+//   PENDING_APPROVAL and only advances via an explicit decision, logged with
+//   reasoning + confidence + supporting data, per the spec's approval-gate
+//   requirement.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AssetClass {
+  EQUITY
+  ETF
+  OPTION
+  CRYPTO
+  CASH
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum TransactionSource {
+  MANUAL
+  AI_RECOMMENDED
+  AUTONOMOUS
+}
+
+enum RecommendedAction {
+  BUY_MORE
+  HOLD
+  REDUCE
+  SELL
+  WATCH
+}
+
+enum OpportunityCategory {
+  UNDERVALUED
+  EMERGING_TREND
+  HIGH_CONVICTION
+  IMPROVING_FUNDAMENTALS
+  COMPOUNDER
+}
+
+enum AlertType {
+  THESIS_CHANGE
+  DRAWDOWN_10PCT
+  EARNINGS_SURPRISE
+  INSIDER_ACTIVITY
+  CONTRACT_WIN
+  LOST_CUSTOMER
+  LIQUIDITY_CONCERN
+  DEBT_CONCERN
+  ACCOUNTING_CONCERN
+  NEW_OPPORTUNITY
+  BETTER_RISK_REWARD
+}
+
+enum AlertSeverity {
+  INFO
+  WATCH
+  URGENT
+}
+
+enum TradeMode {
+  MANUAL_APPROVAL
+  AUTONOMOUS
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+}
+
+enum TradeProposalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXECUTED
+  CANCELLED
+  EXPIRED
+}
+
+/// A connected brokerage account (e.g. a Robinhood Agentic Trading account).
+/// Populated by syncing from the brokerage integration, not hand-edited.
+model Account {
+  id           String   @id @default(cuid())
+  provider     String // e.g. "robinhood"
+  externalId   String   @unique // brokerage account id
+  cashBalance  Decimal  @default(0)
+  buyingPower  Decimal  @default(0)
+  lastSyncedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  holdings      Holding[]
+  transactions  Transaction[]
+  tradeProposals TradeProposal[]
+}
+
+/// A current position, mirrored from the brokerage account.
+model Holding {
+  id            String     @id @default(cuid())
+  accountId     String
+  account       Account    @relation(fields: [accountId], references: [id])
+  symbol        String
+  name          String
+  assetClass    AssetClass @default(EQUITY)
+  sector        String?
+  quantity      Decimal
+  avgCostBasis  Decimal
+  updatedAt     DateTime   @updatedAt
+
+  recommendations Recommendation[]
+
+  @@unique([accountId, symbol])
+  @@index([symbol])
+}
+
+/// Historical fills, mirrored from the brokerage account.
+model Transaction {
+  id          String            @id @default(cuid())
+  accountId   String
+  account     Account           @relation(fields: [accountId], references: [id])
+  symbol      String
+  side        TradeSide
+  quantity    Decimal
+  price       Decimal
+  source      TransactionSource @default(MANUAL)
+  externalId  String?           @unique // brokerage order/fill id
+  executedAt  DateTime
+
+  @@index([symbol])
+  @@index([executedAt])
+}
+
+/// End-of-day (or intraday) price ticks, used for performance charts and
+/// benchmark comparisons. Backed by a market-data provider integration.
+model PriceSnapshot {
+  id        String   @id @default(cuid())
+  symbol    String
+  price     Decimal
+  volume    BigInt?
+  capturedAt DateTime
+
+  @@index([symbol, capturedAt])
+}
+
+/// Portfolio value vs. S&P 500, tracked over time for the overview page and
+/// performance-tracking metrics (CAGR, alpha, beta, Sharpe, drawdown).
+model PerformanceSnapshot {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  portfolioValue  Decimal
+  sp500Value      Decimal
+  cashBalance     Decimal
+
+  @@index([date])
+}
+
+/// Per-holding investment thesis, refreshed over time. Each new analysis
+/// creates a new row rather than overwriting the last one, so "has the
+/// thesis changed?" can be answered by diffing against `previousId`.
+model Recommendation {
+  id                     String            @id @default(cuid())
+  holdingId              String
+  holding                Holding           @relation(fields: [holdingId], references: [id])
+  symbol                 String
+  thesis                 String
+  thesisChanged          Boolean           @default(false)
+  bullCase               String
+  bearCase               String
+  catalysts              String
+  risks                  String
+  fairValueOpinion       String?
+  technicalTrend         String?
+  institutionalSentiment String?
+  confidenceScore        Int // 1-10
+  action                 RecommendedAction
+  previousId             String?           @unique
+  previous               Recommendation?   @relation("RecommendationHistory", fields: [previousId], references: [id])
+  next                   Recommendation?   @relation("RecommendationHistory")
+  generatedAt            DateTime          @default(now())
+
+  @@index([symbol, generatedAt])
+}
+
+/// Candidates not currently held — the "Opportunities" surface.
+model Opportunity {
+  id              String              @id @default(cuid())
+  symbol          String
+  name            String
+  category        OpportunityCategory
+  thesis          String
+  confidenceScore Int // 1-10
+  identifiedAt    DateTime            @default(now())
+  dismissedAt     DateTime?
+
+  @@index([symbol])
+}
+
+/// Portfolio-level risk dashboard snapshot. Each factor is scored 1-100
+/// (higher = riskier) so the UI can render a consistent gauge.
+model RiskAssessment {
+  id                String   @id @default(cuid())
+  concentrationRisk Int
+  sectorRisk        Int
+  valuationRisk     Int
+  earningsRisk      Int
+  regulatoryRisk    Int
+  liquidityRisk     Int
+  macroRisk         Int
+  overallScore      Int
+  notes             String?
+  generatedAt       DateTime @default(now())
+
+  @@index([generatedAt])
+}
+
+/// A generated morning briefing. Content sections are stored as structured
+/// JSON so the page can render them without re-deriving from raw sources,
+/// while still linking back to the Recommendation/RiskAssessment rows used.
+model Briefing {
+  id                String   @id @default(cuid())
+  date              DateTime @unique
+  portfolioSummary  Json
+  marketRecap       Json
+  opportunitiesNote String?
+  riskAssessmentId  String?
+  generatedAt       DateTime @default(now())
+}
+
+/// A news/filing/event item surfaced by the monitoring layer. `materiality`
+/// is a 1-10 score used to decide whether it's worth surfacing at all
+/// ("only notify when genuinely meaningful").
+model NewsItem {
+  id           String   @id @default(cuid())
+  symbol       String? // null for macro/market-wide items
+  headline     String
+  summary      String?
+  source       String
+  url          String?
+  materiality  Int // 1-10
+  publishedAt  DateTime
+
+  @@index([symbol, publishedAt])
+}
+
+/// A surfaced alert per the spec's "Alerts" section.
+model Alert {
+  id              String        @id @default(cuid())
+  type            AlertType
+  severity        AlertSeverity @default(INFO)
+  symbol          String?
+  message         String
+  evidence        String?
+  confidenceScore Int // 1-10
+  createdAt       DateTime      @default(now())
+  acknowledgedAt  DateTime?
+
+  @@index([createdAt])
+}
+
+/// The single path to order placement. Every proposal starts at
+/// PENDING_APPROVAL; only a human decision (or, in a future explicitly
+/// enabled AUTONOMOUS mode, a policy-gated auto-approval) moves it forward.
+/// Execution itself happens via the Robinhood Agentic Trading MCP
+/// connector, not a stored-credential REST call — see ARCHITECTURE.md.
+model TradeProposal {
+  id              String              @id @default(cuid())
+  accountId       String
+  account         Account             @relation(fields: [accountId], references: [id])
+  symbol          String
+  side            TradeSide
+  quantity        Decimal
+  orderType       OrderType
+  limitPrice      Decimal?
+  stopPrice       Decimal?
+  mode            TradeMode           @default(MANUAL_APPROVAL)
+  reasoning       String
+  confidenceScore Int // 1-10
+  supportingData  Json
+  reversible      Boolean             @default(true)
+  status          TradeProposalStatus @default(PENDING_APPROVAL)
+  robinhoodOrderId String?            @unique
+  createdAt       DateTime            @default(now())
+  decidedAt       DateTime?
+  executedAt      DateTime?
+
+  @@index([status])
+  @@index([symbol])
+}

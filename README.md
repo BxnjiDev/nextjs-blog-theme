@@ -1,108 +1,44 @@
-![Netlify Next.js Blog Template designed by Bejamas](https://user-images.githubusercontent.com/43764894/223762618-62742b4e-9424-44a7-8e85-9f7e4e19db54.png)
+# Atlas — Portfolio Intelligence Dashboard
 
+Atlas monitors a brokerage portfolio and market/news data, and surfaces
+recommendations, a risk dashboard, and a daily briefing. It is
+**recommendation-only**: nothing in this codebase submits a live trade. See
+[ARCHITECTURE.md](./ARCHITECTURE.md) for the full design, what's real vs.
+mocked, and how brokerage execution (via Robinhood Agentic Trading's MCP
+connector) is deliberately kept out of the app's own credentials.
 
-[![Deploy to Netlify Button](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/netlify-templates/nextjs-blog-theme)
+## Stack
 
+Next.js 14 (App Router) · TypeScript · Tailwind CSS · PostgreSQL · Prisma
 
-A customizable blog starter using:
+## Getting started
 
-- [Next.js](https://github.com/vercel/next.js) v14 (Pages Router)
-- [Tailwind](https://tailwindcss.com/) v3.0
-- Built-in [MDX](https://mdxjs.com/) v1 support
-- Includes modern design with dark & light themes
-
-![Preview of blog theme. Author named Jay Doe and blog's name is "Next.js Blog Theme" with one blog post](nextjs-blog-theme-preview.png)
-
-[Take a gander at the demo.](https://bejamas-nextjs-blog.netlify.app)
-
-[Click here to watch the template walkthrough!](https://www.youtube.com/watch?v=63QZHs259dY)
-
-## Table of Contents:
-
-- [Getting Started](#getting-started)
-  - [Setting Up Locally](#setting-up-locally)
-  - [Using the Wizard](#using-the-setup-wizard)
-- [Configuring the Blog](#configuring-the-blog)
-- [Adding New Posts](#adding-new-posts)
-- [Testing](#testing)
-  - [Included Default Testing](#included-default-testing)
-  - [Removing Renovate](#removing-renovate)
-
-## Getting Started
-
----
-
-You can get started with this project in two ways: locally or using the [setup wizard](https://nextjs-wizard.netlify.app/).
-
-### Setting Up Locally
-
-If you're doing it locally, start with clicking the [use this template](https://github.com/netlify-templates/nextjs-blog-theme/generate) button on GitHub. This will create a new repository with this template's files on your GitHub account. Once that is done, clone your new repository and navigate to it in your terminal.
-
-From there, you can install the project's dependencies by running:
-
-```shell
-yarn install
+```bash
+cp .env.example .env   # point DATABASE_URL at a local Postgres instance
+npm install
+npm run db:generate
+npm run db:migrate
+npm run db:seed        # loads clearly-fake sample data so the UI isn't empty
+npm run dev
 ```
 
-Finally, you can run your project locally with:
+Then open http://localhost:3000. Pages:
 
-```shell
-yarn run dev
-```
+- `/` — portfolio overview (value, day change, vs. S&P 500, holdings table)
+- `/holdings` — per-position thesis, bull/bear case, catalysts, risks, recommended action
+- `/opportunities` — candidates not currently held
+- `/risk` — portfolio risk dashboard
+- `/briefing` — daily briefing (empty until a generation job is wired up)
+- `/connections` — what's actually connected vs. mocked right now
 
-Open your browser and visit <http://localhost:3000>, your project should be running!
+## Project status
 
-### Using the Setup Wizard
+This is an early scaffold: data model, integration-layer interfaces, and
+dashboard UI are in place against mock/seed data. The scheduled
+recommendation/risk/briefing generation job, real market-data and news
+vendor integrations, alerting, and the autonomous-trading mode are not built
+yet — see the "What's not built yet" section of ARCHITECTURE.md.
 
-![Preview of Setup Wizard showing the initial page of a setup form](nextjs-setup-wizard.png)
+## License
 
-Through the [setup wizard](https://nextjs-wizard.netlify.app/), you can create your blog in a few clicks and deploy to Netlify.
-
-## Configuring the blog
-
-The config is based on environment variables to make it easy to integrate with any Jamstack platform, like Netlify.
-
-Here are the variables you can edit:
-| Variable | Description | Options
-| --- | --- | --- |
-| `BLOG_NAME` | the name of your blog, displayed below the avatar ||
-| `BLOG_TITLE` | the main header (`h1`) on the home page ||
-| `BLOG_FOOTER_TEXT`| the text in the footer ||
-| `BLOG_THEME` | the theme to pass to Tailwind | default |
-| `BLOG_FONT_HEADINGS` | the font-family for all HTML headings, from `h1` to `h6`| sans-serif (default), serif, monospace|
-| `BLOG_FONT_PARAGRAPHS` | the font-family for all other HTML elements | sans-serif (default), serif, monospace|
-
-All of the env variables can be configured through the [Wizard](https://nextjs-wizard.netlify.app/) or through setting the project's environment variables. You can do this in your Netlify dashaboard (Site settings/Build & deploy/Environment/Environment variables).
-
-https://user-images.githubusercontent.com/3611928/153997545-6dcdeef0-e570-49e7-93d6-ce0d393d16c9.mp4
-
-[alt: video walkthrough of editing env vars]
-
-If setting an environment variable isn't your cup of tea, the defaults can be changed in [`utils/global-data.js`](/utils/global-data.js). You can also remove the variables and hard code blog information where these variables are used in the code base.
-
-- `BLOG_THEME, BLOG_FONT_HEADINGS, & BLOG_FONT_PARAGRAPHS` are used in [`tailwind-preset.js`](tailwind-preset.js)
-- `BLOG_NAME, BLOG_TITLE, BLOG_FOOTER_TEXT` are used in [`pages/index.js`](pages/index.js) & [`pages/posts/[slug].js`](pages/posts/[slug].js) through the `globalData` object.
-
-## Adding new posts
-
-All posts are stored in `/posts` directory. To make a new post, create a new file with the [`.mdx` extension](https://mdxjs.com/).
-
-Since the posts are written in `MDX` format you can pass props and components. That means you can use [React components](https://reactjs.org/docs/components-and-props.html) inside your posts to make them more interactive. Learn more about how to do so in the [MDX docs on content](https://mdxjs.com/docs/using-mdx/#components).
-
-https://user-images.githubusercontent.com/3611928/152727802-102ec296-41c8-446d-93ed-922d11187073.mp4
-
-[alt: video walkthrough of adding a new blog post]
-
-## Testing
-
-### Included Default Testing
-
-We’ve included some tooling that helps us maintain these templates. This template currently uses:
-
-- [Renovate](https://www.mend.io/free-developer-tools/renovate/) - to regularly update our dependencies
-
-If your team is not interested in this tooling, you can remove them with ease!
-
-### Removing Renovate
-
-In order to keep our project up-to-date with dependencies we use a tool called [Renovate](https://github.com/marketplace/renovate). If you’re not interested in this tooling, delete the `renovate.json` file and commit that onto your main branch.
+MIT

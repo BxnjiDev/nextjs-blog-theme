@@ -1,9 +1,17 @@
+/** @type {import('tailwindcss').Config} */
 module.exports = {
-  mode: 'jit',
-  content: [
-    './pages/**/*.{js,ts,jsx,tsx}',
-    './components/**/*.{js,ts,jsx,tsx}',
-  ],
-  darkMode: 'class', // or 'media' or 'class'
-  presets: [require('./utils/tailwind-preset')],
+  content: ['./app/**/*.{js,ts,jsx,tsx,mdx}', './components/**/*.{js,ts,jsx,tsx,mdx}'],
+  darkMode: 'media',
+  theme: {
+    extend: {
+      colors: {
+        risk: {
+          low: '#16a34a',
+          medium: '#d97706',
+          high: '#dc2626',
+        },
+      },
+    },
+  },
+  plugins: [require('@tailwindcss/typography')],
 };
