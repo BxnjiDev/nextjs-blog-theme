@@ -1,10 +1,12 @@
-export default function StatCard({
-  label,
+import WidgetCard from './WidgetCard';
+
+export default function StatWidget({
+  title,
   value,
   sublabel,
   tone = 'neutral',
 }: {
-  label: string;
+  title: string;
   value: string;
   sublabel?: string;
   tone?: 'neutral' | 'positive' | 'negative';
@@ -12,10 +14,9 @@ export default function StatCard({
   const toneClass = tone === 'positive' ? 'text-risk-low' : tone === 'negative' ? 'text-risk-high' : 'text-atlas-text';
 
   return (
-    <div className="rounded-lg border border-atlas-border bg-atlas-surface p-4">
-      <p className="text-xs uppercase tracking-wide text-atlas-text-tertiary">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${toneClass}`}>{value}</p>
+    <WidgetCard title={title}>
+      <p className={`text-2xl font-semibold ${toneClass}`}>{value}</p>
       {sublabel && <p className="mt-1 text-xs text-atlas-text-tertiary">{sublabel}</p>}
-    </div>
+    </WidgetCard>
   );
 }

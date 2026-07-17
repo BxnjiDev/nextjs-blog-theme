@@ -37,27 +37,94 @@ cp .env.example .env   # point DATABASE_URL at a local Postgres instance
 npm install
 npm run db:generate
 npm run db:migrate
-npm run db:seed        # loads clearly-fake sample data so the UI isn't empty
+npm run db:seed          # loads clearly-fake sample data so the UI isn't empty
+
+# Atlas OS is a private, single-user app — set AUTH_SECRET, ATLAS_AUTH_EMAIL,
+# ATLAS_AUTH_PASSWORD in .env, then provision the one account:
+npm run auth:setup
+
 npm run dev
 ```
 
-Then open http://localhost:3000. Pages:
+Then open http://localhost:3000 and sign in. Primary navigation:
 
-- `/` — portfolio overview (value, day change, vs. S&P 500, allocation donut, holdings table, data-quality badges)
-- `/holdings` — per-position thesis, bull/bear case, catalysts, risks, recommended action, expected outcome, full explainability breakdown
-- `/intelligence` — portfolio intelligence dashboard: current vs. previous conviction, color-coded trend, latest thesis update, top risks/catalysts, latest material news per holding
-- `/intelligence/[symbol]` — "Why I Own This": company overview, original vs. current thesis, growth drivers, competitive advantages, bull/bear case, what would strengthen/weaken the thesis, sell conditions, recent financials, conviction category breakdown + history chart, complete thesis change-event timeline, thesis-accuracy score, recommendation history with performance attribution
-- `/opportunities` — candidates not currently held, each with an evidence-based comparison against a current holding (now including real revenue-growth data)
-- `/risk` — portfolio risk dashboard (12 components, trend chart, previous-vs-current delta, real earnings-proximity risk)
-- `/health` — portfolio health score (9 components, trend chart, top improvements/concerns)
-- `/performance` — recommendation outcome tracking (30/90/180/365-day return vs. SPY), graded correct/incorrect, self-critique lessons learned
-- `/scorecard` — permanent recommendation scorecard, confidence calibration (Brier score + win rate by confidence band), detected patterns
-- `/briefing` — daily briefing (value/performance, largest movers, news, risks, portfolio health, recommended actions, real upcoming earnings)
-- `/connections` — live connection-health panel (DB, providers, last job run times for all 18 jobs, live-evaluation sync log)
+- `/` — **Home**, the executive-briefing dashboard: greeting, portfolio health, cash, market status, provider status, latest sync, highest-conviction recommendation, recent thesis change, upcoming earnings, today's focus, quick actions
+- `/portfolio` — value, day change, vs. S&P 500, allocation donut, holdings table, data-quality badges
+- `/intelligence` (+ `/intelligence/[symbol]`) — portfolio intelligence dashboard and per-symbol "Why I Own This": thesis, conviction breakdown/history, recent material news
+- `/recommendations` (+ `/recommendations/[id]`) — recommendation cards and history, linking into the full Investment Memo
+- `/timeline` — chronological feed of every sync, trade, thesis update, and recommendation
+- `/performance` — recommendation outcome tracking (30/90/180/365-day return vs. SPY)
+- `/mission` — what Atlas is (and isn't), its operating principles, and the evaluation-account rules
+- `/atlas` — **Atlas Chat**, the conversational interface (see "Atlas OS v1" below)
+- `/settings` — account, operating mode, links to operational tools
+
+Everything from earlier phases is still reachable from the sidebar's "More"
+section: Holdings, Risk, Health, Opportunities, Compare, Simulator,
+Scorecard, Daily Briefing, Executions, Connections.
 
 Whenever a synced account is marked as the evaluation account, every page
 shows a banner: *"Recommendation-only evaluation mode. Trades are executed
 manually by the user."*
+
+## Atlas OS v1
+
+Atlas OS is the application layer on top of Atlas Core (everything described
+elsewhere in this README and in ARCHITECTURE.md — the recommendation
+engine, thesis engine, learning engine, provider validation, Robinhood sync,
+scheduler, trust layer, execution boundary, data-quality gates). Atlas Core
+is unchanged by Atlas OS; the frontend orchestrates it, never replaces it.
+
+**Frontend.** Next.js 14 App Router. `app/(app)/layout.tsx` is the shell
+(sidebar, evaluation banner, status indicator) wrapping every authenticated
+page; `app/layout.tsx` stays thin (fonts, forced dark theme) so `/login` can
+render without the shell. Dark-first design system in `tailwind.config.js`'s
+`atlas.*` palette. Framer Motion for page transitions, Lucide for icons,
+`react-markdown` + `remark-gfm` for chat rendering.
+
+**Authentication.** Hand-rolled, not next-auth or an auth-as-a-service —
+this is a single-admin private app, so a stateless signed JWT
+(`lib/auth/session.ts`, via `jose`) in an httpOnly/secure/sameSite=lax
+cookie is the whole mechanism. `middleware.ts` checks the cookie's
+signature+expiry (Edge runtime, no DB call) for every route except
+`/login` and the pre-existing `/api/jobs/*`/`/api/sync/*` routes (which
+already enforce their own bearer-token auth for external callers).
+`lib/auth/currentUser.ts` does the fuller DB-backed check for anything that
+needs the actual user record. The one account is provisioned by
+`npm run auth:setup` from `ATLAS_AUTH_EMAIL`/`ATLAS_AUTH_PASSWORD`
+(bcrypt-hashed before storage, plaintext never persisted).
+
+**Atlas Chat.** `/atlas` (`components/atlas/AtlasChatClient.tsx`) streams
+Claude's response over Server-Sent Events from `POST /api/atlas/chat`.
+Claude is the reasoning engine; Atlas Core is the intelligence engine —
+Claude never answers a portfolio-specific question from its own memory,
+only by calling one of ten tools (`lib/atlas/tools.ts`) that each wrap an
+existing Atlas Core function (`lib/atlas/toolExecutors.ts`): `get_portfolio`,
+`get_briefing`, `get_recommendations`, `get_timeline`, `get_risk`,
+`get_thesis`, `get_performance`, `compare`, `simulate`, `recall_memory`.
+None of these tools write anything — the tool-calling loop can only ever
+read (see `lib/domain/executionBoundary.test.ts`, extended to cover this).
+
+**Conversation flow.** One request round-trips through a loop
+(`app/api/atlas/chat/route.ts`): call Claude with the message history and
+tool definitions → if it requests a tool, execute it against Atlas Core,
+feed the JSON result back → repeat (capped at `ATLAS_CHAT_MAX_TOOL_ROUNDS`,
+default 6) → stream text deltas to the browser as they arrive → persist the
+full turn (`Conversation`/`ChatMessage` models) including which tools ran
+and what they returned, once the turn ends. A failed turn (e.g. no
+`ANTHROPIC_API_KEY` configured) still persists an explanatory assistant
+message, so the failure survives a reload rather than silently vanishing.
+Recommendation-shaped tool results are rendered as `RecommendationCard`s
+under the assistant's text (`lib/atlas/extractRecommendationCards.ts`).
+
+**What's new vs. reused.** New: `User`/`Conversation`/`ChatMessage` models
+(additive-only — no Atlas Core model touched), the auth layer, the shell,
+Home's widgets, the tool-calling layer, Atlas Chat itself. Reused as-is:
+every domain function the tools call, `computeRisk`/`computePortfolioHealth`/
+`computeSectorWeights` (now also shared by `lib/domain/simulatorMetrics.ts`,
+extracted from `components/SimulatorClient.tsx` so the "what if" math has
+exactly one implementation instead of two), the evaluation-config rules
+shown on `/mission`, `StatCard`/`ActionBadge`/`ConfidenceBadge`/
+`FreshnessStrip` (repainted to the new palette, not rebuilt).
 
 ## Live-evaluation account sync
 
@@ -141,6 +208,9 @@ providers when unset, never fabricating data in their place.
 | `SYNC_SECRET` | Required for `POST /api/sync/account` to run — not needed for the local CLI (`npm run sync:account`), which talks to Postgres directly |
 | `SYNC_STALE_MINUTES` | Reject a sync payload whose `asOf` is older than this many minutes (default 60) |
 | `EVALUATION_MAX_CAPITAL` | Starting-capital cap for the live-evaluation account, in dollars (default 500) — a sync exceeding it by cost basis gets a warning, not a rejection |
+| `AUTH_SECRET` | Required. Long random string signing the Atlas OS session cookie's JWT — generate with `openssl rand -base64 32`. Changing it invalidates every session. |
+| `ATLAS_AUTH_EMAIL` / `ATLAS_AUTH_PASSWORD` | The one Atlas OS account's credentials — only read by `npm run auth:setup`, which hashes the password before storing it |
+| `ATLAS_CHAT_MAX_TOOL_ROUNDS` | Max Claude↔tool round trips per Atlas Chat turn before it answers with whatever it has (default 6) |
 
 ## Project status
 

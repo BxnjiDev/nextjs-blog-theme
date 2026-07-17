@@ -16,18 +16,25 @@
     "robinhood:mcp": "tsx scripts/robinhoodMcpInspect.ts",
     "providers:check": "tsx scripts/checkProviders.ts",
     "scheduler": "tsx scripts/scheduler.ts",
+    "auth:setup": "tsx scripts/setupAuthUser.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
     "@prisma/client": "^5.20.0",
+    "bcryptjs": "^3.0.3",
     "classnames": "^2.5.1",
+    "framer-motion": "^12.42.2",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.25.0",
     "next": "^14.2.5",
     "nodemailer": "^9.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.9.2",
+    "remark-gfm": "^4.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

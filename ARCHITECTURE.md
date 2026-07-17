@@ -690,6 +690,135 @@ CLI: `npm run scheduler -- {list, status, run <job>, run-all, enable
 lock/retry/skip/history behavior verified against a real Postgres
 database.
 
+## Atlas OS v1 — product layer
+
+Atlas Core (everything above this section) is stable infrastructure —
+Atlas OS is the application built on top of it. The distinction matters
+architecturally: Atlas OS is not allowed to reimplement anything Atlas Core
+already does, only orchestrate it for a screen or a conversation.
+
+### Route structure and the shell
+
+`app/(app)/` is a Next.js route group holding every authenticated page —
+Home (`app/(app)/page.tsx`), Portfolio, Intelligence, Recommendations,
+Timeline, Performance, Mission, Atlas, Settings, and every pre-existing
+page from Phases 1-3.7 (moved in, not rewritten). `app/(app)/layout.tsx` is
+the shell: it loads the current user (redirects to `/login` if none — a
+defense-in-depth check behind `middleware.ts`, which already blocks the
+request before it gets here), renders `Sidebar` + the existing
+`EvaluationBanner`/`StatusIndicator`, and wraps children in a small
+Framer Motion fade for page transitions. `app/layout.tsx` (outside the
+group) stays deliberately thin — fonts and the forced-dark `<html>` class —
+so `/login` renders without any of the authenticated chrome.
+
+### Authentication
+
+A single-admin private app doesn't need OAuth, a session-table-backed
+provider, or next-auth's App Router workarounds — it needs a password
+check and a way to remember "yes, this is the one authorized person."
+`lib/auth/session.ts` signs a JWT (`jose`, HS256) containing the user id and
+email, stored in an httpOnly/secure/sameSite=lax cookie
+(`SESSION_COOKIE_NAME = 'atlas_session'`, 30-day expiry). `middleware.ts`
+verifies the signature and expiry on every request (Edge runtime — no DB
+call is possible there) and redirects to `/login` on failure;
+`lib/auth/currentUser.ts` does the fuller, DB-backed lookup for anything
+that needs the actual `User` row. `/api/jobs/*` and `/api/sync/*` are
+explicitly excluded from the cookie gate — they predate Atlas OS and
+already enforce their own bearer-token auth (`CRON_SECRET`/`SYNC_SECRET`)
+for external callers (Vercel Cron, an agent session posting a sync
+payload) that have no browser session and shouldn't need one.
+
+The one account is provisioned by `scripts/setupAuthUser.ts`
+(`npm run auth:setup`) from `ATLAS_AUTH_EMAIL`/`ATLAS_AUTH_PASSWORD` —
+bcrypt-hashed (`lib/auth/password.ts`, 12 rounds) before it ever touches
+the database; the plaintext password is read once, at setup time, and
+never stored. Login (`app/login/actions.ts`) is a plain
+`<form action={login}>` Server Action, matching the rest of the codebase's
+no-client-JS convention, reporting failure via a `?error=1` redirect rather
+than component state.
+
+### Atlas Chat and tool calling
+
+Claude is Atlas's reasoning engine; Atlas Core is the intelligence engine.
+The chat route (`app/api/atlas/chat/route.ts`) never lets Claude answer a
+portfolio-specific question from its own training — it must call a tool,
+and every tool (`lib/atlas/tools.ts`) is a thin JSON-Schema wrapper around
+one existing `lib/domain` function (`lib/atlas/toolExecutors.ts`):
+
+| Tool | Wraps |
+| --- | --- |
+| `get_portfolio` | `getPortfolioOverview()` |
+| `get_briefing` | latest `Briefing` row + `normalizeBriefingPortfolioSummary`/`normalizeBriefingMarketRecap` |
+| `get_recommendations` | `Recommendation` list/detail queries (same shape as `/recommendations`) |
+| `get_timeline` | `getPortfolioTimeline()` |
+| `get_risk` | latest `RiskAssessment` row |
+| `get_thesis` | `Thesis` + `ConvictionAssessment` + `ThesisChangeEvent` history |
+| `get_performance` | `getPerformanceSummary()` |
+| `compare` | `compareOpportunities()` |
+| `simulate` | `getSimulatorBaseline()` + `computeSimulatedMetrics()` (see below) |
+| `recall_memory` | `buildMemoryContext()` |
+
+Every executor is read-only by construction — none calls a job, a sync
+function, or anything that writes outside `Conversation`/`ChatMessage`.
+`lib/domain/executionBoundary.test.ts` (Phase 3.7) already scans the whole
+source tree for a brokerage order-placement path; it covers `lib/atlas/`
+too, since nothing there is exempt from that guarantee.
+
+**The loop** (`route.ts`): call `client.messages.stream()` with the message
+history and `ATLAS_TOOLS` → if `stop_reason === 'tool_use'`, execute each
+requested tool via `executeTool()` and append a `tool_result` block per
+call → call Claude again with the updated history → repeat, capped at
+`ATLAS_CHAT_MAX_TOOL_ROUNDS` (default 6) → once Claude stops requesting
+tools, the accumulated text is the answer. Text deltas are streamed to the
+browser as Server-Sent Events as they arrive; the full turn (text +
+`toolCalls: [{toolName, input, output}]`) is persisted as one `ChatMessage`
+row only after the loop ends — the `toolCalls` field is a genuine audit
+trail proving which real Atlas Core calls produced the answer, not
+decoration. A turn that fails before producing any text (e.g.
+`ANTHROPIC_API_KEY` unset) still persists an explanatory assistant message,
+so the failure is visible in history rather than disappearing once the
+transient SSE error event is gone.
+
+**Client side** (`components/atlas/AtlasChatClient.tsx`) reads the SSE
+stream by hand (`res.body.getReader()`, splitting on `\n\n`) rather than
+pulling in a chat SDK — the protocol is five event types
+(`conversation`/`text`/`tool_call`/`tool_result`/`done`/`error`), simple
+enough not to need one. A new conversation's id arrives in the first
+event; the URL is updated (`router.replace('/atlas?c=<id>')`) only after
+the turn completes, so an in-flight stream is never interrupted by a
+navigation-triggered remount — and the remount that follows is safe
+precisely because everything from that turn is already persisted.
+
+`lib/atlas/extractRecommendationCards.ts` inspects a message's `toolCalls`
+for recommendation-shaped `get_recommendations` output and renders
+`RecommendationCard`s underneath the assistant's text — the same
+component used on Home and `/recommendations`, not a chat-specific
+reimplementation.
+
+### Removing duplication, not adding it
+
+Building the `simulate` tool surfaced a real instance of duplicated logic:
+`components/SimulatorClient.tsx` recomputed risk/health/sector-weights
+inline in a `useMemo`. That computation is now `lib/domain/simulatorMetrics.ts`'s
+`computeSimulatedMetrics()` — a pure function importing only
+`computeRisk`/`computePortfolioHealth`/`computeSectorWeights` (themselves
+already dependency-free) — called by both `SimulatorClient.tsx` and the
+`simulate` tool. It's a separate module from `lib/domain/simulator.ts`
+(which still holds `getSimulatorBaseline()`, the Prisma/market-data-heavy
+fetch) specifically so the client bundle for `/simulator` never pulls in
+Prisma or the Anthropic SDK — an actual production-build failure this
+split fixed.
+
+### Conversation persistence
+
+`User` → `Conversation` → `ChatMessage` are additive-only models (migration
+`20260717190000_atlas_os_v1_auth_and_chat`); nothing in Atlas Core's schema
+was touched. A `ChatMessage.role` is only ever `USER` or `ASSISTANT` — a
+tool round-trip within one turn is never replayed to Claude as a separate
+history entry; it's folded into that turn's `toolCalls` field once the
+turn is done. `Conversation.title` is the first user message, truncated —
+never a second AI call just to summarize a title.
+
 ## Background jobs
 
 | Job | File | Idempotency |

@@ -3,6 +3,11 @@ import { marketDataProvider, secFilingsProvider, type CompanyFundamentals, type 
 import { getStoredNews } from './news';
 import { getPortfolioOverview } from './portfolio';
 
+// computeSimulatedMetrics lives in lib/domain/simulatorMetrics.ts, not here —
+// that module is imported directly by components/SimulatorClient.tsx (a
+// 'use client' component), and this file's getSimulatorBaseline() pulls in
+// Prisma/market-data/Anthropic, none of which can be bundled for the browser.
+
 /** Everything needed to re-run computeRisk/computePortfolioHealth for one
  * holding at a HYPOTHETICAL quantity, without any further I/O. This is the
  * same per-symbol data lib/jobs/generateRiskAssessment.ts and

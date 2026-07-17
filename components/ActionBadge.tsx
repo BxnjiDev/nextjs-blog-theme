@@ -1,6 +1,6 @@
 const styles: Record<string, string> = {
   BUY_MORE: 'bg-risk-low/10 text-risk-low',
-  HOLD: 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  HOLD: 'bg-atlas-surface-raised text-atlas-text-secondary',
   REDUCE: 'bg-risk-medium/10 text-risk-medium',
   SELL: 'bg-risk-high/10 text-risk-high',
   WATCH: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',

@@ -3,9 +3,90 @@
 @tailwind utilities;
 
 html {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 body {
   @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+}
+
+/* Atlas OS v1 shell chrome sits on its own near-black canvas rather than
+   the gray-950 existing pages use — a deliberately slightly deeper base so
+   the sidebar/topbar read as "frame" and page content reads as "surface". */
+.atlas-shell {
+  background-color: theme('colors.atlas.canvas');
+  color: theme('colors.atlas.text');
+}
+
+.atlas-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.atlas.border') transparent;
+}
+.atlas-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.atlas-scrollbar::-webkit-scrollbar-thumb {
+  background-color: theme('colors.atlas.border');
+  border-radius: 9999px;
+}
+.atlas-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background-color: theme('colors.atlas.accent / 35%');
+}
+
+/* Markdown rendered inside Atlas Chat (react-markdown output) */
+.atlas-markdown :where(p, ul, ol) {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.atlas-markdown :where(h1, h2, h3) {
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  font-weight: 600;
+}
+.atlas-markdown ul {
+  list-style: disc;
+  padding-left: 1.25em;
+}
+.atlas-markdown ol {
+  list-style: decimal;
+  padding-left: 1.25em;
+}
+.atlas-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background-color: rgba(255, 255, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 0.3em;
+}
+.atlas-markdown pre {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid theme('colors.atlas.border');
+  border-radius: 0.5em;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+}
+.atlas-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.atlas-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.atlas-markdown th,
+.atlas-markdown td {
+  border: 1px solid theme('colors.atlas.border');
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+.atlas-markdown a {
+  color: theme('colors.atlas.accent');
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

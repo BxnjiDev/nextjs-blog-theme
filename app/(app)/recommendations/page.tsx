@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import ActionBadge from '@/components/ActionBadge';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import StatCard from '@/components/StatCard';
+import RecommendationCard from '@/components/RecommendationCard';
 import { formatPercent } from '@/lib/format';
 import { setRecommendationDecision } from './actions';
 
@@ -56,6 +57,31 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
           <StatCard label="Avg alpha (90d)" value={scorecard.alphaVsSpyAvgPct !== null ? formatPercent(scorecard.alphaVsSpyAvgPct) : 'n/a'} />
           <StatCard label="Utilization" value={scorecard.utilizationPct !== null ? `${scorecard.utilizationPct.toFixed(0)}%` : 'n/a'} />
           <StatCard label="Acceptance rate" value={scorecard.acceptanceRatePct !== null ? `${scorecard.acceptanceRatePct.toFixed(0)}%` : 'n/a'} />
+        </div>
+      )}
+
+      {recommendations.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-sm font-medium text-atlas-text-secondary">Latest recommendations</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {recommendations.slice(0, 4).map((r) => (
+              <RecommendationCard
+                key={r.id}
+                compact
+                data={{
+                  id: r.id,
+                  symbol: r.symbol,
+                  action: r.action,
+                  confidenceScore: r.confidenceScore,
+                  thesis: r.thesis,
+                  proposedDollarAmount: r.proposedDollarAmount != null ? Number(r.proposedDollarAmount) : null,
+                  percentageOfPortfolio: r.percentageOfPortfolio,
+                  dataQualityStatus: r.dataQualityStatus,
+                  convictionScore: r.holding.thesis?.convictionAssessments[0]?.overallScore ?? null,
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
 

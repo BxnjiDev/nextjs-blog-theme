@@ -1105,3 +1105,58 @@ model SchedulerJobConfig {
   enabled   Boolean  @default(true)
   updatedAt DateTime @updatedAt
 }
+
+// ---------------------------------------------------------------------------
+// Atlas OS v1 — product layer (authentication + Atlas Chat). These models are
+// additive only: nothing above this line (Atlas Core — recommendation
+// engine, thesis engine, learning engine, provider validation, Robinhood
+// sync, scheduler, trust layer, execution boundary, data-quality gates) is
+// modified. Atlas OS orchestrates Atlas Core; it never re-implements it.
+// ---------------------------------------------------------------------------
+
+/// Single-admin (today) credential store for the hand-rolled session-cookie
+/// auth in lib/auth/session.ts — no OAuth, no next-auth. Sessions are
+/// stateless signed JWTs (see AUTH_SECRET), so this table isn't read on every
+/// request, only at login; `id` is embedded in the JWT `sub` claim.
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  conversations Conversation[]
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+/// One Atlas Chat thread. `title` is derived from the first user message
+/// (truncated) at creation time — never re-summarized by an extra AI call.
+model Conversation {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+/// One turn in a conversation. `toolCalls` records which Atlas Core services
+/// an ASSISTANT turn invoked (name/input/result) — an audit trail proving
+/// answers came from real tool calls, not from the model's own memory.
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ChatRole
+  content        String       @db.Text
+  toolCalls      Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}

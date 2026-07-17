@@ -1,11 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { DataQuality } from '@/lib/integrations';
-import { computeRisk, type RiskHoldingInput } from '@/lib/domain/risk';
-import { computePortfolioHealth, type HealthHoldingInput } from '@/lib/domain/portfolioHealth';
-import { computeSectorWeights } from '@/lib/domain/investmentMemo';
-import type { HoldingView, PortfolioOverview } from '@/lib/domain/portfolio';
+import { computeSimulatedMetrics } from '@/lib/domain/simulatorMetrics';
 import type { SimulatorBaseline } from '@/lib/domain/simulator';
 
 const RISK_LABELS: Record<string, string> = {
@@ -23,27 +19,6 @@ const RISK_LABELS: Record<string, string> = {
   stalenessRisk: 'Data staleness',
 };
 
-function buildView(symbol: string, name: string, sector: string | null, qty: number, price: number, avgCostBasis: number, asOf: Date, quality: DataQuality): HoldingView {
-  const marketValue = qty * price;
-  const costBasisTotal = qty * avgCostBasis;
-  const unrealizedPnl = marketValue - costBasisTotal;
-  return {
-    id: symbol,
-    symbol,
-    name,
-    sector,
-    quantity: qty,
-    avgCostBasis,
-    currentPrice: price,
-    changePercent: 0,
-    marketValue,
-    unrealizedPnl,
-    unrealizedPnlPercent: costBasisTotal > 0 ? (unrealizedPnl / costBasisTotal) * 100 : 0,
-    quoteAsOf: asOf,
-    quoteQuality: quality,
-  };
-}
-
 export default function SimulatorClient({ baseline }: { baseline: SimulatorBaseline }) {
   const [shares, setShares] = useState<Record<string, number>>(
     () => Object.fromEntries(baseline.holdings.map((h) => [h.symbol, h.quantity]))
@@ -51,64 +26,10 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
 
   const isDirty = baseline.holdings.some((h) => shares[h.symbol] !== h.quantity);
 
-  const { risk, health, sectorWeights, hypotheticalCash, largestPosition } = useMemo(() => {
-    const views = baseline.holdings.map((h) =>
-      buildView(h.symbol, h.name, h.sector, shares[h.symbol] ?? h.quantity, h.currentPrice, h.avgCostBasis, h.quoteAsOf, h.quoteQuality)
-    );
-    const sumMarketValue = views.reduce((s, v) => s + v.marketValue, 0);
-    // Total portfolio value stays fixed (this is a reallocation, not new
-    // capital) — cash is the residual after hypothetical position sizes.
-    const hypotheticalCash = baseline.totalValue - sumMarketValue;
-
-    const riskHoldings: RiskHoldingInput[] = baseline.holdings.map((h, i) => ({
-      view: views[i],
-      history: h.history,
-      fundamentals: h.fundamentals,
-      daysSinceLastFiling: h.daysSinceLastFiling,
-      daysToNextEarnings: h.daysToNextEarnings,
-      negativeNewsCritical: h.negativeNewsCritical,
-      negativeNewsHigh: h.negativeNewsHigh,
-    }));
-    const risk = computeRisk({
-      holdings: riskHoldings,
-      totalValue: baseline.totalValue,
-      cashBalance: hypotheticalCash,
-      sp500History: baseline.sp500History,
-      portfolioHistory: baseline.portfolioHistory,
-      quoteQualities: baseline.holdings.map((h) => h.quoteQuality),
-    });
-
-    const healthHoldings: HealthHoldingInput[] = baseline.holdings.map((h, i) => ({
-      view: views[i],
-      trend: h.trend,
-      convictionScore: h.convictionScore,
-      valuationScore: h.valuationScore,
-      revenueGrowth: h.revenueGrowth,
-    }));
-    const health = computePortfolioHealth({
-      holdings: healthHoldings,
-      totalValue: baseline.totalValue,
-      cashBalance: hypotheticalCash,
-      risk: { overallScore: risk.overallScore, concentrationRisk: risk.concentrationRisk.score, sectorRisk: risk.sectorRisk.score, macroRisk: risk.macroRisk.score },
-    });
-
-    const syntheticOverview: PortfolioOverview = {
-      totalValue: baseline.totalValue,
-      cashBalance: hypotheticalCash,
-      dayChangeValue: 0,
-      dayChangePercent: 0,
-      sp500Level: 0,
-      holdings: views,
-      largestWinner: null,
-      largestLoser: null,
-      asOf: new Date(),
-    };
-    const sectorWeights = computeSectorWeights(syntheticOverview);
-
-    const largestPosition = [...views].sort((a, b) => b.marketValue - a.marketValue)[0] ?? null;
-
-    return { risk, health, sectorWeights, hypotheticalCash, largestPosition };
-  }, [baseline, shares]);
+  const { risk, health, sectorWeights, hypotheticalCash, largestPosition } = useMemo(
+    () => computeSimulatedMetrics(baseline, shares),
+    [baseline, shares]
+  );
 
   const largestRiskEntry = Object.entries(RISK_LABELS)
     .map(([key, label]) => ({ key, label, score: (risk as unknown as Record<string, { score: number }>)[key].score }))

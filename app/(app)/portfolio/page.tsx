@@ -12,10 +12,10 @@ export default async function OverviewPage() {
 
   if (!overview) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
-        <h1 className="text-lg font-semibold">No account connected yet</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Run <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run db:seed</code> for
+      <div className="rounded-lg border border-dashed border-atlas-border p-8 text-center">
+        <h1 className="text-lg font-semibold text-atlas-text">No account connected yet</h1>
+        <p className="mt-2 text-sm text-atlas-text-secondary">
+          Run <code className="rounded bg-atlas-surface-raised px-1">npm run db:seed</code> for
           sample data, or connect a real brokerage account on the{' '}
           <Link href="/connections" className="underline">
             Connections
@@ -31,8 +31,8 @@ export default async function OverviewPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold">Portfolio Overview</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        <h1 className="text-2xl font-semibold text-atlas-text">Portfolio Overview</h1>
+        <p className="mt-1 text-sm text-atlas-text-secondary">
           Mock data unless a real account has been synced — see{' '}
           <Link href="/connections" className="underline">
             Connections
@@ -59,33 +59,33 @@ export default async function OverviewPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">Largest winner</h2>
+        <div className="rounded-lg border border-atlas-border bg-atlas-surface p-4">
+          <h2 className="text-sm font-medium text-atlas-text-tertiary">Largest winner</h2>
           {overview.largestWinner ? (
-            <p className="mt-2 text-lg">
+            <p className="mt-2 text-lg text-atlas-text">
               {overview.largestWinner.symbol}{' '}
               <span className="text-risk-low">{formatPercent(overview.largestWinner.changePercent)}</span>
             </p>
           ) : (
-            <p className="mt-2 text-sm text-gray-500">No holdings.</p>
+            <p className="mt-2 text-sm text-atlas-text-tertiary">No holdings.</p>
           )}
         </div>
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">Largest loser</h2>
+        <div className="rounded-lg border border-atlas-border bg-atlas-surface p-4">
+          <h2 className="text-sm font-medium text-atlas-text-tertiary">Largest loser</h2>
           {overview.largestLoser ? (
-            <p className="mt-2 text-lg">
+            <p className="mt-2 text-lg text-atlas-text">
               {overview.largestLoser.symbol}{' '}
               <span className="text-risk-high">{formatPercent(overview.largestLoser.changePercent)}</span>
             </p>
           ) : (
-            <p className="mt-2 text-sm text-gray-500">No holdings.</p>
+            <p className="mt-2 text-sm text-atlas-text-tertiary">No holdings.</p>
           )}
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <h2 className="mb-2 text-sm font-medium text-gray-500 dark:text-gray-400">Allocation</h2>
+        <div className="rounded-lg border border-atlas-border bg-atlas-surface p-4">
+          <h2 className="mb-2 text-sm font-medium text-atlas-text-tertiary">Allocation</h2>
           <div className="flex items-center gap-4">
             <div className="w-full max-w-[220px]">
               <AllocationDonut
@@ -100,7 +100,7 @@ export default async function OverviewPage() {
                 ]}
               />
             </div>
-            <ul className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+            <ul className="space-y-1 text-xs text-atlas-text-secondary">
               {overview.holdings.map((h) => (
                 <li key={h.symbol}>
                   {h.symbol}: {overview.totalValue > 0 ? ((h.marketValue / overview.totalValue) * 100).toFixed(1) : '0.0'}%
@@ -112,7 +112,7 @@ export default async function OverviewPage() {
             </ul>
           </div>
         </div>
-        <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-400">
+        <div className="rounded-lg border border-dashed border-atlas-border p-4 text-sm text-atlas-text-secondary">
           Deeper analysis lives on the{' '}
           <Link href="/intelligence" className="underline">
             Intelligence
@@ -126,10 +126,10 @@ export default async function OverviewPage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold">Holdings</h2>
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+        <h2 className="mb-3 text-lg font-semibold text-atlas-text">Holdings</h2>
+        <div className="overflow-x-auto rounded-lg border border-atlas-border">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+            <thead className="bg-atlas-surface-raised text-left text-xs uppercase text-atlas-text-tertiary">
               <tr>
                 <th className="px-4 py-2">Symbol</th>
                 <th className="px-4 py-2">Qty</th>
@@ -142,7 +142,7 @@ export default async function OverviewPage() {
             </thead>
             <tbody>
               {overview.holdings.map((h) => (
-                <tr key={h.id} className="border-t border-gray-100 dark:border-gray-800">
+                <tr key={h.id} className="border-t border-atlas-border-subtle text-atlas-text">
                   <td className="px-4 py-2 font-medium">
                     <Link href={`/holdings#${h.symbol}`}>{h.symbol}</Link>
                   </td>
