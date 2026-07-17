@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { resolveAnthropicModel } from '@/lib/integrations';
+import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,31 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+const STALENESS_LABEL: Record<string, string> = {
+  fresh: 'Fresh',
+  aging: 'Aging',
+  stale: 'Stale',
+  unknown: 'No data yet',
+};
+
+/** Renders the shared getDataFreshnessSnapshot() fields for one provider —
+ * last updated, staleness, and (once lib/integrations/retry.ts has logged
+ * at least one call) reliability/latency. */
+function FreshnessLine({ freshness }: { freshness: { lastUpdated: Date | null; staleness: string; reliabilityPct: number | null; avgLatencyMs: number | null } | null }) {
+  if (!freshness) return null;
+  return (
+    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+      Last updated: {freshness.lastUpdated ? freshness.lastUpdated.toLocaleString() : 'never'} · {STALENESS_LABEL[freshness.staleness] ?? freshness.staleness}
+      {freshness.reliabilityPct !== null && (
+        <>
+          {' '}
+          · Reliability (last 20 calls): {freshness.reliabilityPct}% · Avg latency: {freshness.avgLatencyMs}ms
+        </>
+      )}
+    </p>
+  );
+}
+
 function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
     <div className="flex items-center justify-between rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
@@ -64,17 +90,15 @@ export default async function ConnectionsPage() {
   const [
     db,
     edgar,
+    freshness,
     latestSnapshot,
     latestRecommendation,
     latestBriefing,
-    latestFilingAlert,
-    latestNewsItem,
     latestRisk,
     latestThesisReview,
     latestHealth,
     latestOutcome,
     latestOpportunityComparison,
-    latestFundamentalSnapshot,
     latestEarningsEvent,
     latestAlertDelivery,
     latestScorecard,
@@ -83,23 +107,33 @@ export default async function ConnectionsPage() {
   ] = await Promise.all([
     checkDb(),
     checkEdgarReachable(),
+    // Single shared source for "when did each real data provider last
+    // update, and how reliable/fast has it been" — also used by the
+    // Investment Memo page (FreshnessStrip). Covers news/fundamentals/SEC
+    // filing freshness below instead of each page running its own copy of
+    // those "latest row" queries.
+    getDataFreshnessSnapshot(),
     prisma.performanceSnapshot.findFirst({ orderBy: { date: 'desc' } }),
     prisma.recommendation.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.briefing.findFirst({ orderBy: { date: 'desc' } }),
-    prisma.alert.findFirst({ where: { type: 'NEW_SEC_FILING' }, orderBy: { createdAt: 'desc' } }),
-    prisma.newsItem.findFirst({ orderBy: { createdAt: 'desc' } }),
     prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.thesis.findFirst({ orderBy: { lastReviewedAt: 'desc' } }),
     prisma.portfolioHealthAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.recommendationOutcome.findFirst({ orderBy: { lastEvaluatedAt: 'desc' } }),
     prisma.opportunityComparison.findFirst({ orderBy: { generatedAt: 'desc' } }),
-    prisma.fundamentalSnapshot.findFirst({ orderBy: { createdAt: 'desc' } }),
     prisma.earningsEvent.findFirst({ orderBy: { updatedAt: 'desc' } }),
     prisma.alertDelivery.findFirst({ orderBy: { createdAt: 'desc' } }),
     prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.account.findFirst({ where: { isEvaluationAccount: true } }),
     prisma.syncLog.findMany({ orderBy: { syncedAt: 'desc' }, take: 10 }),
   ]);
+
+  const freshnessByProvider = new Map(freshness.map((f) => [f.provider, f]));
+  const marketDataFreshness = freshnessByProvider.get('twelvedata') ?? null;
+  const newsFreshness = freshnessByProvider.get('finnhub') ?? null;
+  const fundamentalsFreshness = freshnessByProvider.get('financialmodelingprep') ?? null;
+  const secFreshness = freshnessByProvider.get('sec-edgar') ?? null;
+  const claudeFreshness = freshnessByProvider.get('claude') ?? null;
 
   return (
     <div className="space-y-6">
@@ -132,13 +166,13 @@ export default async function ConnectionsPage() {
           />
           <HealthRow
             label="Last SEC filing alert"
-            ok={Boolean(latestFilingAlert)}
-            detail={latestFilingAlert ? latestFilingAlert.createdAt.toLocaleString() : 'None yet'}
+            ok={Boolean(secFreshness?.lastUpdated)}
+            detail={secFreshness?.lastUpdated ? secFreshness.lastUpdated.toLocaleString() : 'None yet'}
           />
           <HealthRow
             label="Last news item stored"
-            ok={Boolean(latestNewsItem)}
-            detail={latestNewsItem ? latestNewsItem.createdAt.toLocaleString() : 'Never run'}
+            ok={Boolean(newsFreshness?.lastUpdated)}
+            detail={newsFreshness?.lastUpdated ? newsFreshness.lastUpdated.toLocaleString() : 'Never run'}
           />
           <HealthRow
             label="Last risk assessment"
@@ -167,8 +201,8 @@ export default async function ConnectionsPage() {
           />
           <HealthRow
             label="Last fundamentals ingest"
-            ok={Boolean(latestFundamentalSnapshot)}
-            detail={latestFundamentalSnapshot ? latestFundamentalSnapshot.createdAt.toLocaleString() : 'Never run'}
+            ok={Boolean(fundamentalsFreshness?.lastUpdated)}
+            detail={fundamentalsFreshness?.lastUpdated ? fundamentalsFreshness.lastUpdated.toLocaleString() : 'Never run'}
           />
           <HealthRow
             label="Last earnings-calendar update"
@@ -273,8 +307,10 @@ export default async function ConnectionsPage() {
               Twelve Data
             </a>{' '}
             key. Quotes are labeled &ldquo;Delayed&rdquo; (not real-time) even when live. A configured key that
-            errors mid-request falls back to mock data for that call only, logged server-side.
+            errors mid-request retries with backoff, then falls back to mock data for that call only —
+            every attempt is logged to ProviderCallLog.
           </p>
+          <FreshnessLine freshness={marketDataFreshness} />
         </div>
 
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
@@ -293,6 +329,7 @@ export default async function ConnectionsPage() {
             clear error rather than a confusing failure deep in a background job. Without a key, the
             recommendation job stores a clearly-labeled data summary instead of fabricated analysis.
           </p>
+          <FreshnessLine freshness={claudeFreshness} />
         </div>
 
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
@@ -311,6 +348,7 @@ export default async function ConnectionsPage() {
             cybersecurity) is sourced via representative sector-ETF company news, documented in{' '}
             <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/news.ts</code>.
           </p>
+          <FreshnessLine freshness={newsFreshness} />
         </div>
 
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
@@ -329,6 +367,7 @@ export default async function ConnectionsPage() {
             populate the revenue-growth and balance-sheet conviction categories that were previously unavailable. This vendor could
             not be live-tested in this sandbox (egress blocked, same as Twelve Data/SEC EDGAR) — see ARCHITECTURE.md.
           </p>
+          <FreshnessLine freshness={fundamentalsFreshness} />
         </div>
 
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
@@ -361,6 +400,7 @@ export default async function ConnectionsPage() {
               ? 'A custom User-Agent is configured.'
               : 'Set SEC_EDGAR_USER_AGENT with a real contact email before relying on this in production.'}
           </p>
+          <FreshnessLine freshness={secFreshness} />
         </div>
       </div>
     </div>

@@ -63,6 +63,31 @@ export default async function ScorecardPage() {
             <p className="text-2xl font-semibold">{latest.avgHoldingPeriodDays !== null ? `${latest.avgHoldingPeriodDays.toFixed(0)}d` : 'n/a'}</p>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">No execution layer — see methodology.</p>
           </div>
+          <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Avg. gain / drawdown (proxy)</p>
+            <p className="text-2xl font-semibold">
+              <span className="text-risk-low">{latest.avgGainPct !== null ? formatPercent(latest.avgGainPct) : 'n/a'}</span>
+              {' / '}
+              <span className="text-risk-high">{latest.avgDrawdownPct !== null ? `-${latest.avgDrawdownPct.toFixed(1)}%` : 'n/a'}</span>
+            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Alpha-based proxy, not a true peak-to-trough measure — see methodology.</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Utilization</p>
+            <p className="text-2xl font-semibold">{latest.utilizationPct !== null ? `${latest.utilizationPct.toFixed(0)}%` : 'n/a'}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">% of recommendations with any recorded decision.</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Acceptance rate</p>
+            <p className="text-2xl font-semibold">{latest.acceptanceRatePct !== null ? `${latest.acceptanceRatePct.toFixed(0)}%` : 'n/a'}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              % of decided recommendations accepted — see{' '}
+              <a href="/recommendations" className="underline">
+                history
+              </a>
+              .
+            </p>
+          </div>
         </div>
       )}
 

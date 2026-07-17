@@ -148,6 +148,25 @@ enum TradeProposalStatus {
   EXPIRED
 }
 
+/// What the user actually did with a recommendation. ACCEPTED/
+/// PARTIALLY_ACCEPTED are auto-detected by matching a synced Transaction
+/// against a PENDING recommendation (lib/domain/recommendationDecisions.ts);
+/// REJECTED/DEFERRED are explicit user actions (there's no way to infer
+/// "I decided not to" from silence).
+enum UserDecision {
+  PENDING
+  ACCEPTED
+  PARTIALLY_ACCEPTED
+  REJECTED
+  DEFERRED
+}
+
+enum ProviderCallOutcome {
+  SUCCESS
+  FAILURE
+  FALLBACK
+}
+
 /// A connected brokerage account (e.g. a Robinhood Agentic Trading account).
 /// Populated by syncing from the brokerage integration, not hand-edited.
 model Account {
@@ -272,6 +291,12 @@ model Recommendation {
   /// AI-invented number). Null for WATCH, where no size applies.
   proposedDollarAmount   Decimal?
   percentageOfPortfolio  Float?
+  /// What the user did about this call — see UserDecision. ACCEPTED/
+  /// PARTIALLY_ACCEPTED are set automatically by matching a later synced
+  /// transaction; REJECTED/DEFERRED are set explicitly by the user.
+  userDecision           UserDecision           @default(PENDING)
+  userDecisionAt         DateTime?
+  userDecisionNote       String?
   /// Per-source freshness/quality metadata captured at generation time
   /// (quote/fundamentals asOf + quality, filing count, news count) — lets
   /// the dashboard show exactly how current an analysis is.
@@ -587,14 +612,20 @@ model RecommendationOutcome {
   recommendedAt         DateTime
   priceAtRecommendation Decimal
   sp500AtRecommendation Decimal
+  return1d              Float?
+  return7d              Float?
   return30d             Float?
   return90d             Float?
   return180d            Float?
   return365d            Float?
+  sp500Return1d         Float?
+  sp500Return7d         Float?
   sp500Return30d        Float?
   sp500Return90d        Float?
   sp500Return180d       Float?
   sp500Return365d       Float?
+  alpha1d               Float?
+  alpha7d               Float?
   alpha30d              Float?
   alpha90d              Float?
   alpha180d             Float?
@@ -834,6 +865,18 @@ model RecommendationScorecard {
   falseNegatives       Int
   alphaVsSpyAvgPct     Float?
   avgHoldingPeriodDays Float?
+  /// Average alpha90d across losing outcomes only (a drawdown proxy — see
+  /// "Why avgDrawdownPct isn't a real peak-to-trough measure" in
+  /// computeScorecard.ts). Positive number = average pain, not a raw delta.
+  avgDrawdownPct       Float?
+  /// Average alpha90d across winning outcomes only.
+  avgGainPct           Float?
+  /// % of recommendations with any userDecision other than PENDING —
+  /// "did the user engage with this at all."
+  utilizationPct       Float?
+  /// % of decided (non-PENDING) recommendations that were ACCEPTED or
+  /// PARTIALLY_ACCEPTED.
+  acceptanceRatePct    Float?
   methodology          Json
   generatedAt          DateTime @default(now())
 
@@ -909,4 +952,29 @@ model SyncLog {
 
   @@index([syncedAt])
   @@index([accountId, syncedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3.6: production-readiness / trust layer — provider health telemetry
+// backing failure-recovery (retries, never-silently-fail) and the data-
+// freshness snapshot shown beside every recommendation.
+// ---------------------------------------------------------------------------
+
+/// One real-provider call attempt (market data, news, fundamentals, SEC
+/// filings, AI reasoning) — never the payload itself, just health
+/// telemetry: did it succeed, how long did it take, did it fall back to
+/// mock. lib/domain/dataFreshness.ts reads the recent window of these per
+/// provider to compute reliability % and average latency; retries recorded
+/// by lib/integrations/retry.ts. Not indefinitely retained — see
+/// pruneOldProviderCallLogs in lib/domain/dataFreshness.ts.
+model ProviderCallLog {
+  id        String              @id @default(cuid())
+  provider  String // e.g. "twelvedata", "finnhub", "financialmodelingprep", "sec-edgar", "claude"
+  operation String // e.g. "getQuote", "getNewsForSymbol"
+  outcome   ProviderCallOutcome
+  latencyMs Int
+  error     String?
+  calledAt  DateTime            @default(now())
+
+  @@index([provider, calledAt])
 }

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider } from '@/lib/integrations';
+import { withRetry } from '@/lib/integrations/retry';
 import {
   AccountSyncPayloadSchema,
   ACCOUNT_SYNC_SCHEMA_VERSION,
@@ -30,6 +31,16 @@ export interface SyncResult {
 
 function isUniqueConstraintError(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+}
+
+/** P2034: "transaction failed due to a write conflict or a deadlock" —
+ * Prisma's own docs recommend retrying the whole transaction, which is
+ * exactly what withRetry(..., { isRetryable: isWriteConflictError }) does
+ * around the $transaction call below. Any other error is not retried, since
+ * repeating a transaction that failed validation or on a real constraint
+ * violation would just fail again. */
+function isWriteConflictError(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034';
 }
 
 async function writeSyncLog(input: {
@@ -175,9 +186,18 @@ export async function syncAccount(rawPayload: unknown, source: string): Promise<
   let recordsAdded = 0;
   let recordsUpdated = 0;
   let recordsSkipped = 0;
+  // Collected separately from `warnings` so a retried attempt (write
+  // conflict/deadlock) can be reset cleanly without double-appending
+  // warnings from an earlier, discarded attempt.
+  const closedPositionWarnings: string[] = [];
 
   try {
-    const accountId = await prisma.$transaction(async (tx) => {
+    const runTransaction = () => {
+      recordsAdded = 0;
+      recordsUpdated = 0;
+      recordsSkipped = 0;
+      closedPositionWarnings.length = 0;
+      return prisma.$transaction(async (tx) => {
       const account = await tx.account.upsert({
         where: { externalId: payload.accountExternalId },
         update: {
@@ -232,7 +252,7 @@ export async function syncAccount(rawPayload: unknown, source: string): Promise<
         if (!payloadSymbols.has(symbol) && Number(prev.quantity) !== 0) {
           await tx.holding.update({ where: { id: prev.id }, data: { quantity: 0 } });
           recordsUpdated++;
-          warnings.push(`${symbol} was not in this payload and had a nonzero quantity on record — treated as fully closed (quantity set to 0).`);
+          closedPositionWarnings.push(`${symbol} was not in this payload and had a nonzero quantity on record — treated as fully closed (quantity set to 0).`);
         }
       }
 
@@ -293,7 +313,11 @@ export async function syncAccount(rawPayload: unknown, source: string): Promise<
       }
 
       return account.id;
-    });
+      });
+    };
+
+    const accountId = await withRetry(runTransaction, { attempts: 3, baseDelayMs: 200, isRetryable: isWriteConflictError });
+    warnings.push(...closedPositionWarnings);
 
     // --- 6. Reconciliation (read-only, after commit — includes a live
     // quote fetch, which doesn't belong inside a DB transaction) ---

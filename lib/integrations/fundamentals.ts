@@ -7,6 +7,7 @@ import type {
   StatementPeriod,
   DataQuality,
 } from './types';
+import { timedProviderCall } from './retry';
 
 const FMP_BASE = 'https://financialmodelingprep.com/api';
 
@@ -360,30 +361,30 @@ class FallbackFundamentalsProvider implements FundamentalsProvider {
     private readonly mock: FundamentalsProvider
   ) {}
 
-  private async attempt<T>(label: string, real: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
+  private async attempt<T>(operation: string, real: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
     try {
-      return await real();
+      return await timedProviderCall('financialmodelingprep', operation, real);
     } catch (err) {
-      console.error(`Fundamentals provider call failed (${label}); falling back to mock data:`, err);
-      return fallback();
+      console.error(`Fundamentals provider call failed (${operation}); falling back to mock data:`, err);
+      return timedProviderCall('financialmodelingprep', operation, fallback, undefined, 'FALLBACK');
     }
   }
 
   getFinancialStatements(symbol: string, periods?: number) {
     return this.attempt(
-      `getFinancialStatements(${symbol})`,
+      'getFinancialStatements',
       () => this.real.getFinancialStatements(symbol, periods),
       () => this.mock.getFinancialStatements(symbol, periods)
     );
   }
   getValuationMetrics(symbol: string) {
-    return this.attempt(`getValuationMetrics(${symbol})`, () => this.real.getValuationMetrics(symbol), () => this.mock.getValuationMetrics(symbol));
+    return this.attempt('getValuationMetrics', () => this.real.getValuationMetrics(symbol), () => this.mock.getValuationMetrics(symbol));
   }
   getOwnership(symbol: string) {
-    return this.attempt(`getOwnership(${symbol})`, () => this.real.getOwnership(symbol), () => this.mock.getOwnership(symbol));
+    return this.attempt('getOwnership', () => this.real.getOwnership(symbol), () => this.mock.getOwnership(symbol));
   }
   getEarningsCalendar(symbol: string) {
-    return this.attempt(`getEarningsCalendar(${symbol})`, () => this.real.getEarningsCalendar(symbol), () => this.mock.getEarningsCalendar(symbol));
+    return this.attempt('getEarningsCalendar', () => this.real.getEarningsCalendar(symbol), () => this.mock.getEarningsCalendar(symbol));
   }
 }
 

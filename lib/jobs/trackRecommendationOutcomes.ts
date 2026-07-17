@@ -9,7 +9,7 @@ export interface OutcomeJobResult {
   errors: { symbol: string; error: string }[];
 }
 
-const WINDOWS = [30, 90, 180, 365] as const;
+const WINDOWS = [1, 7, 30, 90, 180, 365] as const;
 
 /** Closing price on the most recent trading day at or before `targetDate`. */
 function closePriceOnOrBefore(history: HistoricalPricePoint[], targetDate: Date): number | null {
@@ -25,8 +25,8 @@ function closePriceOnOrBefore(history: HistoricalPricePoint[], targetDate: Date)
 /**
  * Performance attribution: for every Recommendation without an outcome
  * row yet, anchors a price/SPY snapshot at the recommendation date. For
- * existing outcome rows, fills in each 30/90/180/365-day window once that
- * much real time has actually elapsed — there is no way to backfill a
+ * existing outcome rows, fills in each 1/7/30/90/180/365-day window once
+ * that much real time has actually elapsed — there is no way to backfill a
  * 365-day return before 365 days pass, so windows legitimately stay null
  * until then. Idempotent: already-computed windows are never recomputed,
  * and a recommendation can only ever get one outcome row (unique FK).
@@ -73,7 +73,7 @@ export async function runRecommendationOutcomesJob(): Promise<OutcomeJobResult> 
 
   const pending = await prisma.recommendationOutcome.findMany({
     where: {
-      OR: [{ return30d: null }, { return90d: null }, { return180d: null }, { return365d: null }],
+      OR: [{ return1d: null }, { return7d: null }, { return30d: null }, { return90d: null }, { return180d: null }, { return365d: null }],
       recommendation: { holding: { accountId } },
     },
   });
@@ -93,6 +93,12 @@ export async function runRecommendationOutcomesJob(): Promise<OutcomeJobResult> 
       const priceAtRec = Number(outcome.priceAtRecommendation);
       const sp500AtRec = Number(outcome.sp500AtRecommendation);
 
+      let return1d = outcome.return1d;
+      let sp500Return1d = outcome.sp500Return1d;
+      let alpha1d = outcome.alpha1d;
+      let return7d = outcome.return7d;
+      let sp500Return7d = outcome.sp500Return7d;
+      let alpha7d = outcome.alpha7d;
       let return30d = outcome.return30d;
       let sp500Return30d = outcome.sp500Return30d;
       let alpha30d = outcome.alpha30d;
@@ -117,7 +123,17 @@ export async function runRecommendationOutcomesJob(): Promise<OutcomeJobResult> 
         const spRet = ((sp500 - sp500AtRec) / sp500AtRec) * 100;
         const alpha = ret - spRet;
 
-        if (window === 30 && return30d === null) {
+        if (window === 1 && return1d === null) {
+          return1d = ret;
+          sp500Return1d = spRet;
+          alpha1d = alpha;
+          anyUpdated = true;
+        } else if (window === 7 && return7d === null) {
+          return7d = ret;
+          sp500Return7d = spRet;
+          alpha7d = alpha;
+          anyUpdated = true;
+        } else if (window === 30 && return30d === null) {
           return30d = ret;
           sp500Return30d = spRet;
           alpha30d = alpha;
@@ -144,6 +160,12 @@ export async function runRecommendationOutcomesJob(): Promise<OutcomeJobResult> 
         await prisma.recommendationOutcome.update({
           where: { id: outcome.id },
           data: {
+            return1d,
+            sp500Return1d,
+            alpha1d,
+            return7d,
+            sp500Return7d,
+            alpha7d,
             return30d,
             sp500Return30d,
             alpha30d,

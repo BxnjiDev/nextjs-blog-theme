@@ -3,6 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import type { CompanyFundamentals, NewsArticle, Quote, SecFiling, Technicals } from './types';
 import { resolveAnthropicModel, type SupportedAnthropicModel } from './anthropicModel';
+import { timedProviderCall } from './retry';
 
 const ExplainabilitySchema = z.object({
   whyNow: z.string().describe('Why this action, at this time — grounded in the data given.'),
@@ -16,6 +17,18 @@ const ExplainabilitySchema = z.object({
     .describe(
       'How this call compares to the two do-nothing alternatives: holding cash, or simply buying SPY with the same dollars. Ground this in the SPY/cash data provided — do not invent a return figure for the recommended action itself.'
     ),
+  vsCurrentAllocation: z
+    .string()
+    .describe(
+      'How this call fits the portfolio\'s current sector/position weights given — does it concentrate an already-large exposure, diversify away from one, or is the portfolio context not informative here. Ground this in the sector-weight data provided.'
+    ),
+  baseCase: z.string().describe('The single most likely outcome — distinct from bullCase (best case) and bearCase (worst case), not just a hedge between them.'),
+  primaryCatalyst: z.string().describe('The ONE catalyst most likely to move this thesis, chosen from the fuller catalysts list — a one-line highlight, not a repeat of the full paragraph.'),
+  biggestUnknown: z.string().describe('The single most consequential thing that genuinely cannot be known from the data given.'),
+  biggestRisk: z.string().describe('The ONE risk that matters most, chosen from the fuller risks list — a one-line highlight, not a repeat of the full paragraph.'),
+  whyConfidenceNotHigher: z
+    .string()
+    .describe('Given the stated confidenceScore, name specifically what is missing or uncertain that keeps it from being higher — never "just because," always a specific gap.'),
 });
 
 const HoldingAnalysisSchema = z.object({
@@ -63,8 +76,9 @@ export interface HoldingAnalysisInput {
   /** Past recommendations/conviction/alerts for this holding plus the
    * portfolio-wide confidence-calibration summary — see lib/domain/memory.ts. */
   memoryContext: string;
-  /** Deterministic grounding for explainability.vsCashAndSpy — real numbers
-   * the model compares against, never invents. */
+  /** Deterministic grounding for explainability.vsCashAndSpy/
+   * vsCurrentAllocation — real numbers the model compares against, never
+   * invents. */
   portfolioContext: {
     cashBalance: number;
     totalPortfolioValue: number;
@@ -72,7 +86,26 @@ export interface HoldingAnalysisInput {
      * lookback used elsewhere in the app (lib/domain/risk.ts helpers). */
     spyRecentReturnPct: number | null;
     spyAnnualizedVolatilityPct: number | null;
+    /** Current portfolio weight by sector (0-100), and this symbol's
+     * sector + current weight if already held — grounding for
+     * vsCurrentAllocation. */
+    sectorWeightsPct: Record<string, number>;
+    thisSymbolSector: string | null;
+    thisSymbolCurrentWeightPct: number;
   };
+}
+
+/** Fields computed in code (never by Claude) and merged into the stored
+ * `explainability` JSON alongside the AI-authored ExplainabilityOutput —
+ * see lib/domain/investmentMemo.ts. Kept as a separate type so it's
+ * structurally obvious these never pass through the model. */
+export interface DeterministicMemoFields {
+  /** Deterministic before/after portfolio risk & health delta if this
+   * recommendation's proposed size were executed. */
+  portfolioImpact: string;
+  /** Deterministic: what the proposed dollar amount would have returned
+   * held in SPY instead, over the same recent lookback. */
+  opportunityCost: string;
 }
 
 const ThesisNarrativeSchema = z.object({
@@ -179,6 +212,9 @@ Rules you must follow:
 - For explainability: whyNot should genuinely steelman the opposite call, not restate whyNow in different words. contradictingEvidence should name real data points against the call, or explicitly say none were found.
 - If historical confidence-calibration data is provided, use it to calibrate your stated confidenceScore — if a similar confidence band has historically over- or under-performed, adjust accordingly rather than ignoring that track record.
 - For explainability.vsCashAndSpy: use ONLY the SPY return/volatility figures given to you — never state a specific expected return for the recommended action itself beyond what's already in expectedOutcome.
+- For explainability.vsCurrentAllocation: use ONLY the sector-weight figures given to you.
+- baseCase must be a genuinely distinct middle scenario, not a paraphrase of bullCase or bearCase. primaryCatalyst and biggestRisk must each be a single highlighted item picked FROM the fuller catalysts/risks text, not new information invented for this field alone.
+- whyConfidenceNotHigher must name a specific missing data point or open question — never a generic hedge.
 - Be concise and evidence-driven. No hype.`;
 
 function buildUserPrompt(input: HoldingAnalysisInput): string {
@@ -239,6 +275,12 @@ function buildUserPrompt(input: HoldingAnalysisInput): string {
       `SPY over the recent lookback: ${pc.spyRecentReturnPct !== null ? `${pc.spyRecentReturnPct.toFixed(1)}% return` : 'return unavailable'}, ` +
       `${pc.spyAnnualizedVolatilityPct !== null ? `${pc.spyAnnualizedVolatilityPct.toFixed(1)}% annualized volatility` : 'volatility unavailable'}. ` +
       'Use this for explainability.vsCashAndSpy.'
+  );
+  const sectorEntries = Object.entries(pc.sectorWeightsPct);
+  lines.push(
+    `\nCurrent sector weights: ${sectorEntries.length > 0 ? sectorEntries.map(([s, w]) => `${s} ${w.toFixed(1)}%`).join(', ') : 'no sector data available'}. ` +
+      `${input.symbol}'s sector: ${pc.thisSymbolSector ?? 'unclassified'}, currently ${pc.thisSymbolCurrentWeightPct.toFixed(1)}% of the portfolio. ` +
+      'Use this for explainability.vsCurrentAllocation.'
   );
 
   lines.push('\nProduce a structured analysis per the schema, following the rules above.');
@@ -460,6 +502,15 @@ class HeuristicAiReasoningProvider implements AiReasoningProvider {
           input.portfolioContext.spyRecentReturnPct !== null
             ? `SPY returned ${input.portfolioContext.spyRecentReturnPct.toFixed(1)}% over the recent lookback (${input.portfolioContext.spyAnnualizedVolatilityPct !== null ? `${input.portfolioContext.spyAnnualizedVolatilityPct.toFixed(1)}% annualized volatility` : 'volatility unavailable'}) — no AI reasoning provider configured to compare this holding's outlook against it.`
             : 'Not assessed — SPY data and AI reasoning provider both unavailable.',
+        vsCurrentAllocation:
+          input.portfolioContext.thisSymbolCurrentWeightPct > 0
+            ? `Currently ${input.portfolioContext.thisSymbolCurrentWeightPct.toFixed(1)}% of the portfolio — no AI reasoning provider configured to assess allocation fit.`
+            : 'Not assessed — no AI reasoning provider configured.',
+        baseCase: unavailableNote,
+        primaryCatalyst: unavailableNote,
+        biggestUnknown: unavailableNote,
+        biggestRisk: unavailableNote,
+        whyConfidenceNotHigher: 'No AI reasoning provider configured — confidence is pinned low by default, not calibrated.',
       },
     };
   }
@@ -535,28 +586,31 @@ class FallbackAiReasoningProvider implements AiReasoningProvider {
 
   async analyzeHolding(input: HoldingAnalysisInput): Promise<HoldingAnalysisOutput> {
     try {
-      return await this.real.analyzeHolding(input);
+      // Only 1 retry (2 attempts) for Claude calls — these run inside a
+      // per-holding batch job, so a full 3-attempt backoff per holding
+      // would multiply badly across a large portfolio.
+      return await timedProviderCall('claude', 'analyzeHolding', () => this.real.analyzeHolding(input), { attempts: 2 });
     } catch (err) {
       console.error(`AI reasoning provider failed for ${input.symbol}; falling back to heuristic summary:`, err);
-      return this.heuristic.analyzeHolding(input);
+      return timedProviderCall('claude', 'analyzeHolding', () => this.heuristic.analyzeHolding(input), undefined, 'FALLBACK');
     }
   }
 
   async generateThesisNarrative(input: ThesisNarrativeInput): Promise<ThesisNarrativeOutput> {
     try {
-      return await this.real.generateThesisNarrative(input);
+      return await timedProviderCall('claude', 'generateThesisNarrative', () => this.real.generateThesisNarrative(input), { attempts: 2 });
     } catch (err) {
       console.error(`AI reasoning provider failed for ${input.symbol} thesis review; falling back to heuristic summary:`, err);
-      return this.heuristic.generateThesisNarrative(input);
+      return timedProviderCall('claude', 'generateThesisNarrative', () => this.heuristic.generateThesisNarrative(input), undefined, 'FALLBACK');
     }
   }
 
   async critiqueRecommendation(input: RecommendationCritiqueInput): Promise<CritiqueOutput> {
     try {
-      return await this.real.critiqueRecommendation(input);
+      return await timedProviderCall('claude', 'critiqueRecommendation', () => this.real.critiqueRecommendation(input), { attempts: 2 });
     } catch (err) {
       console.error(`AI reasoning provider failed for ${input.symbol} critique; falling back to heuristic summary:`, err);
-      return this.heuristic.critiqueRecommendation(input);
+      return timedProviderCall('claude', 'critiqueRecommendation', () => this.heuristic.critiqueRecommendation(input), undefined, 'FALLBACK');
     }
   }
 }

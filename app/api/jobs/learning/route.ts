@@ -5,16 +5,18 @@ import { runConfidenceCalibrationJob } from '@/lib/jobs/computeConfidenceCalibra
 import { runThesisAccuracyJob } from '@/lib/jobs/computeThesisAccuracy';
 import { runScorecardJob } from '@/lib/jobs/computeScorecard';
 import { runPatternDetectionJob } from '@/lib/jobs/detectPatterns';
+import { pruneOldProviderCallLogs } from '@/lib/domain/dataFreshness';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Runs the continuous-learning suite in one route. These five jobs are
- * grouped under a single weekly cron entry (rather than five separate
- * cron entries) because they're all low-frequency aggregations that only
- * become meaningful once real time has elapsed — see vercel.json and
- * ARCHITECTURE.md for the rationale. Each sub-job is independently
- * idempotent; a failure in one does not stop the others from running.
+ * Runs the continuous-learning suite in one route, plus ProviderCallLog
+ * housekeeping. These jobs are grouped under a single weekly cron entry
+ * (rather than one cron entry each) because they're all low-frequency
+ * aggregations that only become meaningful once real time has elapsed —
+ * see vercel.json and ARCHITECTURE.md for the rationale. Each sub-job is
+ * independently idempotent; a failure in one does not stop the others from
+ * running.
  */
 export async function GET(req: NextRequest) {
   const unauthorized = assertCronAuthorized(req);
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest) {
     ['thesisAccuracy', () => runThesisAccuracyJob()],
     ['scorecard', () => runScorecardJob()],
     ['patterns', () => runPatternDetectionJob()],
+    ['pruneProviderCallLogs', () => pruneOldProviderCallLogs()],
   ];
 
   for (const [name, run] of steps) {

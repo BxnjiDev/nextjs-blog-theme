@@ -4,6 +4,7 @@ import { runPortfolioHealthJob } from '@/lib/jobs/generatePortfolioHealth';
 import { runThesisJob } from '@/lib/jobs/generateThesis';
 import { runRecommendationJob } from '@/lib/jobs/generateRecommendations';
 import { runBriefingJob } from '@/lib/jobs/generateBriefing';
+import { detectRecommendationDecisions } from './recommendationDecisions';
 
 export interface PostSyncPipelineResult {
   steps: Record<string, { ok: boolean; result?: unknown; error?: string }>;
@@ -24,6 +25,11 @@ export interface PostSyncPipelineResult {
  * Best-effort: one step failing doesn't stop the rest, since the sync
  * itself already succeeded and partial downstream analysis is still more
  * useful than none. Every step's outcome is reported back to the caller.
+ *
+ * `recommendationDecisions` runs first — it matches the transactions this
+ * sync just ingested against still-PENDING recommendations
+ * (lib/domain/recommendationDecisions.ts), so downstream jobs and pages see
+ * up-to-date decision status.
  */
 export async function runPostSyncPipeline(): Promise<PostSyncPipelineResult> {
   const steps: PostSyncPipelineResult['steps'] = {};
@@ -36,6 +42,7 @@ export async function runPostSyncPipeline(): Promise<PostSyncPipelineResult> {
     }
   };
 
+  await run('recommendationDecisions', () => detectRecommendationDecisions());
   await run('portfolioRefresh', () => runPortfolioRefreshJob());
   await run('riskAssessment', () => runRiskAssessmentJob());
   await run('thesisReview', () => runThesisJob());

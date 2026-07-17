@@ -1,5 +1,6 @@
 import type { NewsProvider, NewsArticle, NewsQueryContext, SectorTopic } from './types';
 import { computeSentiment, computeMateriality, computeDedupeKey } from './newsScoring';
+import { timedProviderCall } from './retry';
 
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
 
@@ -162,23 +163,23 @@ class FallbackNewsProvider implements NewsProvider {
     private readonly mock: NewsProvider
   ) {}
 
-  private async attempt(label: string, fn: () => Promise<NewsArticle[]>): Promise<NewsArticle[]> {
+  private async attempt(operation: string, fn: () => Promise<NewsArticle[]>): Promise<NewsArticle[]> {
     try {
-      return await fn();
+      return await timedProviderCall('finnhub', operation, fn);
     } catch (err) {
-      console.error(`News provider call failed (${label}); returning empty feed:`, err);
-      return [];
+      console.error(`News provider call failed (${operation}); returning empty feed:`, err);
+      return timedProviderCall('finnhub', operation, async () => [], undefined, 'FALLBACK');
     }
   }
 
   getNewsForSymbol(symbol: string, context: NewsQueryContext, sinceHours?: number) {
-    return this.attempt(`getNewsForSymbol(${symbol})`, () => this.real.getNewsForSymbol(symbol, context, sinceHours));
+    return this.attempt('getNewsForSymbol', () => this.real.getNewsForSymbol(symbol, context, sinceHours));
   }
   getMarketNews(context: NewsQueryContext, sinceHours?: number) {
     return this.attempt('getMarketNews', () => this.real.getMarketNews(context, sinceHours));
   }
   getSectorNews(topic: SectorTopic, context: NewsQueryContext, sinceHours?: number) {
-    return this.attempt(`getSectorNews(${topic})`, () => this.real.getSectorNews(topic, context, sinceHours));
+    return this.attempt('getSectorNews', () => this.real.getSectorNews(topic, context, sinceHours));
   }
 }
 

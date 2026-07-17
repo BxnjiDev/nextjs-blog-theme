@@ -57,12 +57,23 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
     return { created: false, reason: 'No account connected yet.' };
   }
 
-  const [overview, performance, risk, health, theses] = await Promise.all([
+  const [overview, performance, risk, health, theses, opportunities, previousBriefing, thesisChangesSinceYesterday] = await Promise.all([
     getPortfolioOverview(),
     getPerformanceSummary(),
     prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.portfolioHealthAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.thesis.findMany({ where: { holding: { accountId: account.id } } }),
+    prisma.opportunity.findMany({
+      where: { dismissedAt: null },
+      include: { comparisons: { orderBy: { generatedAt: 'desc' }, take: 1 } },
+      orderBy: { confidenceScore: 'desc' },
+      take: 5,
+    }),
+    prisma.briefing.findFirst({ where: { date: { lt: todayUtcDateOnly() } }, orderBy: { date: 'desc' } }),
+    prisma.thesisChangeEvent.findMany({
+      where: { symbol: { in: account.holdings.map((h) => h.symbol) }, createdAt: { gte: new Date(Date.now() - 36 * 60 * 60 * 1000) } },
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
 
   const recommendedActions = account.holdings.map((h) => {
@@ -79,9 +90,46 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
     .map((t) => ({ symbol: t.symbol, convictionScore: t.convictionScore, lastReviewedAt: t.lastReviewedAt.toISOString() }))
     .sort((a, b) => a.convictionScore - b.convictionScore);
 
+  const capitalDeployed = overview ? overview.totalValue - overview.cashBalance : null;
+
+  // Deterministic split of today's fresh recommendations into "would do"
+  // (a directional call with real conviction behind it) vs. "would avoid"
+  // (a call against the position, or too little conviction to act on) —
+  // never a separate AI pass, just a threshold over data already generated.
+  const freshRecs = account.holdings
+    .map((h) => h.recommendations[0])
+    .filter((r): r is NonNullable<typeof r> => Boolean(r) && (Date.now() - r!.generatedAt.getTime()) / (1000 * 60 * 60) < 30);
+  const whatAtlasWouldDoToday = freshRecs
+    .filter((r) => (r.action === 'BUY_MORE' && r.confidenceScore >= 6) || (r.action === 'REDUCE' && r.confidenceScore >= 6) || r.action === 'SELL')
+    .map((r) => `${r.action.replace(/_/g, ' ')} ${r.symbol} (confidence ${r.confidenceScore}/10)`);
+  const whatAtlasWouldAvoidToday = freshRecs
+    .filter((r) => r.action === 'WATCH' || r.action === 'HOLD' || r.confidenceScore < 6)
+    .map((r) => `${r.symbol}: ${r.action === 'WATCH' || r.action === 'HOLD' ? r.action.toLowerCase() : `low-confidence ${r.action.toLowerCase().replace('_', ' ')}`} — not enough conviction to act today`);
+
+  const biggestOpportunities = opportunities.map((o) => ({
+    symbol: o.symbol,
+    name: o.name,
+    category: o.category,
+    confidenceScore: o.confidenceScore,
+    comparedTo: o.comparisons[0]?.comparedToSymbol ?? null,
+    overallEdge: o.comparisons[0]?.overallEdge ?? null,
+  }));
+
+  const prevSummary = previousBriefing ? (previousBriefing.portfolioSummary as unknown as { totalValue: number | null }) : null;
+  const changesSinceYesterday = previousBriefing
+    ? {
+        previousDate: previousBriefing.date.toISOString().slice(0, 10),
+        totalValueDelta: overview && prevSummary?.totalValue !== null && prevSummary?.totalValue !== undefined ? overview.totalValue - prevSummary.totalValue : null,
+        healthScoreDelta: health?.previousScore !== null && health?.previousScore !== undefined ? health.overallScore - health.previousScore : null,
+        riskScoreDelta: risk?.previousScore !== null && risk?.previousScore !== undefined ? risk.overallScore - risk.previousScore : null,
+        newThesisChanges: thesisChangesSinceYesterday.length,
+      }
+    : null;
+
   const portfolioSummary = {
     totalValue: overview?.totalValue ?? null,
     cashBalance: overview?.cashBalance ?? null,
+    capitalDeployed,
     dayChangeValue: overview?.dayChangeValue ?? null,
     dayChangePercent: overview?.dayChangePercent ?? null,
     sp500Level: overview?.sp500Level ?? null,
@@ -100,6 +148,16 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
     portfolioHealth: health
       ? { overallScore: health.overallScore, previousScore: health.previousScore, topConcerns: health.topConcerns, topImprovements: health.topImprovements }
       : null,
+    biggestOpportunities,
+    thesisChangesSinceYesterday: thesisChangesSinceYesterday.map((e) => ({
+      symbol: e.symbol,
+      changeType: e.changeType,
+      whatChanged: e.whatChanged,
+      createdAt: e.createdAt.toISOString(),
+    })),
+    changesSinceYesterday,
+    whatAtlasWouldDoToday,
+    whatAtlasWouldAvoidToday,
   };
 
   const heldSymbols = account.holdings.map((h) => h.symbol);
@@ -149,7 +207,7 @@ export async function runBriefingJob(): Promise<BriefingJobResult> {
     portfolioNews,
     upcomingEvents,
     notes: [
-      'No macro/economic data sources (Federal Reserve, CPI, rates, oil, gold, Bitcoin) are connected yet.',
+      'Economic events: not available — no macro/economic data source (Federal Reserve, CPI, rates, oil, gold, Bitcoin) is connected yet.',
     ],
   };
 

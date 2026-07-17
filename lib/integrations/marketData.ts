@@ -5,6 +5,7 @@ import type {
   HistoricalPricePoint,
   CompanyFundamentals,
 } from './types';
+import { timedProviderCall } from './retry';
 
 const TWELVE_DATA_BASE = 'https://api.twelvedata.com';
 
@@ -242,38 +243,45 @@ class FallbackMarketDataProvider implements MarketDataProvider {
     private readonly mock: MarketDataProvider
   ) {}
 
-  private async attempt<T>(label: string, real: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
+  /**
+   * Retries the real provider (transient network/rate-limit errors),
+   * logging exactly one ProviderCallLog row for the attempt (SUCCESS or
+   * FAILURE). If every retry is exhausted, falls back to mock data and
+   * logs a second row tagged FALLBACK — so the freshness dashboard can
+   * distinguish "real data" from "we degraded to mock" for this call.
+   */
+  private async attempt<T>(operation: string, real: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
     try {
-      return await real();
+      return await timedProviderCall('twelvedata', operation, real);
     } catch (err) {
-      console.error(`Market data provider call failed (${label}); falling back to mock data:`, err);
-      return fallback();
+      console.error(`Market data provider call failed (${operation}); falling back to mock data:`, err);
+      return timedProviderCall('twelvedata', operation, fallback, undefined, 'FALLBACK');
     }
   }
 
   getQuote(symbol: string) {
-    return this.attempt(`getQuote(${symbol})`, () => this.real.getQuote(symbol), () => this.mock.getQuote(symbol));
+    return this.attempt('getQuote', () => this.real.getQuote(symbol), () => this.mock.getQuote(symbol));
   }
   getQuotes(symbols: string[]) {
     return this.attempt('getQuotes', () => this.real.getQuotes(symbols), () => this.mock.getQuotes(symbols));
   }
   getTechnicals(symbol: string) {
     return this.attempt(
-      `getTechnicals(${symbol})`,
+      'getTechnicals',
       () => this.real.getTechnicals(symbol),
       () => this.mock.getTechnicals(symbol)
     );
   }
   getHistoricalDaily(symbol: string, days?: number) {
     return this.attempt(
-      `getHistoricalDaily(${symbol})`,
+      'getHistoricalDaily',
       () => this.real.getHistoricalDaily(symbol, days),
       () => this.mock.getHistoricalDaily(symbol, days)
     );
   }
   getFundamentals(symbol: string) {
     return this.attempt(
-      `getFundamentals(${symbol})`,
+      'getFundamentals',
       () => this.real.getFundamentals(symbol),
       () => this.mock.getFundamentals(symbol)
     );

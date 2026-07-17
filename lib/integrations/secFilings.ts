@@ -1,4 +1,5 @@
 import type { SecFilingsProvider, SecFiling } from './types';
+import { timedProviderCall } from './retry';
 
 /**
  * REAL implementation — SEC EDGAR's submissions API is public and requires
@@ -6,10 +7,12 @@ import type { SecFilingsProvider, SecFiling } from './types';
  * https://www.sec.gov/os/webmaster-faq#developers). Unlike market data and
  * news, there's no reason to mock this one.
  *
- * Fails soft (returns []) on any network/parse error rather than throwing,
- * so a flaky outbound connection degrades the dashboard instead of crashing
- * it — but note this means "no filings" and "fetch failed" currently look
- * the same to the caller. Revisit if that distinction matters later.
+ * Retries transient failures (via timedProviderCall/withRetry, logging to
+ * ProviderCallLog) before failing soft (returns []) on any network/parse
+ * error rather than throwing, so a flaky outbound connection degrades the
+ * dashboard instead of crashing it — but note this means "no filings" and
+ * "fetch failed" currently look the same to the caller. Revisit if that
+ * distinction matters later.
  */
 class EdgarSecFilingsProvider implements SecFilingsProvider {
   private cikCache = new Map<string, string>();
@@ -47,34 +50,38 @@ class EdgarSecFilingsProvider implements SecFilingsProvider {
 
   async getRecentFilings(symbol: string, limit = 5): Promise<SecFiling[]> {
     try {
-      const cik = await this.lookupCik(symbol);
-      if (!cik) return [];
-
-      const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-        headers: { 'User-Agent': this.userAgent() },
-        next: { revalidate: 60 * 60 },
-      });
-      if (!res.ok) return [];
-
-      const data = await res.json();
-      const recent = data?.filings?.recent;
-      if (!recent) return [];
-
-      const count = Math.min(limit, recent.form?.length ?? 0);
-      const filings: SecFiling[] = [];
-      for (let i = 0; i < count; i++) {
-        filings.push({
-          symbol,
-          formType: recent.form[i],
-          filedAt: new Date(recent.filingDate[i]),
-          url: `https://www.sec.gov/Archives/edgar/data/${parseInt(cik, 10)}/${recent.accessionNumber[i].replace(/-/g, '')}/${recent.primaryDocument[i]}`,
-        });
-      }
-      return filings;
+      return await timedProviderCall('sec-edgar', 'getRecentFilings', () => this.fetchRecentFilings(symbol, limit));
     } catch (err) {
       console.error(`SEC EDGAR fetch failed for ${symbol}:`, err);
       return [];
     }
+  }
+
+  private async fetchRecentFilings(symbol: string, limit: number): Promise<SecFiling[]> {
+    const cik = await this.lookupCik(symbol);
+    if (!cik) return [];
+
+    const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+      headers: { 'User-Agent': this.userAgent() },
+      next: { revalidate: 60 * 60 },
+    });
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const recent = data?.filings?.recent;
+    if (!recent) return [];
+
+    const count = Math.min(limit, recent.form?.length ?? 0);
+    const filings: SecFiling[] = [];
+    for (let i = 0; i < count; i++) {
+      filings.push({
+        symbol,
+        formType: recent.form[i],
+        filedAt: new Date(recent.filingDate[i]),
+        url: `https://www.sec.gov/Archives/edgar/data/${parseInt(cik, 10)}/${recent.accessionNumber[i].replace(/-/g, '')}/${recent.primaryDocument[i]}`,
+      });
+    }
+    return filings;
   }
 }
 

@@ -5,6 +5,7 @@ import { buildMemoryContext } from '@/lib/domain/memory';
 import { getPortfolioOverview, getActiveAccountId } from '@/lib/domain/portfolio';
 import { computeProposedPosition } from '@/lib/domain/positionSizing';
 import { annualizedVolatility } from '@/lib/domain/risk';
+import { computeSectorWeights, computeOpportunityCost, computePortfolioImpact } from '@/lib/domain/investmentMemo';
 
 /** Idempotency window: re-running the job within this many hours of the last
  * analysis for a holding is a no-op for that holding, so a retried or
@@ -40,6 +41,8 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
     spyAsc.length >= 2 && spyAsc[0].close > 0 ? ((spyAsc[spyAsc.length - 1].close - spyAsc[0].close) / spyAsc[0].close) * 100 : null;
   const spyVolatility = annualizedVolatility(sp500History); // decimal, e.g. 0.18 = 18%
   const spyAnnualizedVolatilityPct = spyVolatility !== null ? spyVolatility * 100 : null;
+  const sectorWeightsPct = overview ? computeSectorWeights(overview) : {};
+  const latestRisk = await prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' }, select: { concentrationRisk: true } });
 
   for (const holding of account.holdings) {
     const previous = holding.recommendations[0];
@@ -82,6 +85,11 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
           totalPortfolioValue: overview?.totalValue ?? 0,
           spyRecentReturnPct,
           spyAnnualizedVolatilityPct,
+          sectorWeightsPct,
+          thisSymbolSector: holding.sector,
+          thisSymbolCurrentWeightPct: overview?.totalValue
+            ? ((overview.holdings.find((h) => h.symbol === holding.symbol)?.marketValue ?? 0) / overview.totalValue) * 100
+            : 0,
         },
       });
 
@@ -93,6 +101,21 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
         totalPortfolioValue: overview?.totalValue ?? 0,
         currentPositionMarketValue,
       });
+
+      // Deterministic memo fields — computed in code, never by Claude —
+      // merged into the same explainability blob the AI-authored fields
+      // live in.
+      const explainabilityWithDeterministicFields = {
+        ...analysis.explainability,
+        portfolioImpact: computePortfolioImpact({
+          action: analysis.action,
+          proposedDollarAmount: sizing.proposedDollarAmount,
+          currentPositionMarketValue,
+          totalPortfolioValue: overview?.totalValue ?? 0,
+          latestConcentrationRisk: latestRisk?.concentrationRisk ?? null,
+        }),
+        opportunityCost: computeOpportunityCost(sizing.proposedDollarAmount, spyRecentReturnPct),
+      };
 
       await prisma.recommendation.create({
         data: {
@@ -111,7 +134,7 @@ export async function runRecommendationJob(options?: { force?: boolean }): Promi
           action: analysis.action,
           expectedOutcome: analysis.expectedOutcome,
           expectedTimeHorizon: analysis.expectedTimeHorizon,
-          explainability: JSON.parse(JSON.stringify(analysis.explainability)),
+          explainability: JSON.parse(JSON.stringify(explainabilityWithDeterministicFields)),
           proposedDollarAmount: sizing.proposedDollarAmount,
           percentageOfPortfolio: sizing.percentageOfPortfolio,
           previousId: previous?.id,

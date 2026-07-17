@@ -15,6 +15,8 @@ interface ReturnMetricShape {
 
 interface PortfolioSummaryShape {
   totalValue: number | null;
+  cashBalance: number | null;
+  capitalDeployed: number | null;
   dayChangeValue: number | null;
   dayChangePercent: number | null;
   sp500Level: number | null;
@@ -25,6 +27,11 @@ interface PortfolioSummaryShape {
   convictionHighlights: Array<{ symbol: string; convictionScore: number; lastReviewedAt: string }>;
   materialRisks: { overallScore: number; previousScore: number | null; notes: string | null } | null;
   portfolioHealth: { overallScore: number; previousScore: number | null; topConcerns: string[] } | null;
+  biggestOpportunities: Array<{ symbol: string; name: string; category: string; confidenceScore: number; comparedTo: string | null; overallEdge: string | null }>;
+  thesisChangesSinceYesterday: Array<{ symbol: string; changeType: string; whatChanged: string | null; createdAt: string }>;
+  changesSinceYesterday: { previousDate: string; totalValueDelta: number | null; healthScoreDelta: number | null; riskScoreDelta: number | null; newThesisChanges: number } | null;
+  whatAtlasWouldDoToday: string[];
+  whatAtlasWouldAvoidToday: string[];
 }
 
 interface PortfolioNewsItemShape {
@@ -88,7 +95,37 @@ export default async function BriefingPage() {
         </div>
       ) : (
         (() => {
-          const summary = briefing.portfolioSummary as unknown as PortfolioSummaryShape;
+          // Briefings generated before Phase 3.6 don't have these fields in
+          // their stored JSON at all (JSON.stringify drops `undefined` keys
+          // entirely) — defaulted here, once, rather than optional-chaining
+          // every call site below, so an old row renders instead of
+          // crashing on `undefined.length` / formatCurrency(undefined).
+          const rawSummary = briefing.portfolioSummary as unknown as Partial<PortfolioSummaryShape>;
+          const summary: PortfolioSummaryShape = {
+            ...rawSummary,
+            totalValue: rawSummary.totalValue ?? null,
+            cashBalance: rawSummary.cashBalance ?? null,
+            capitalDeployed: rawSummary.capitalDeployed ?? null,
+            dayChangeValue: rawSummary.dayChangeValue ?? null,
+            dayChangePercent: rawSummary.dayChangePercent ?? null,
+            sp500Level: rawSummary.sp500Level ?? null,
+            largestWinner: rawSummary.largestWinner ?? null,
+            largestLoser: rawSummary.largestLoser ?? null,
+            performance: rawSummary.performance ?? {
+              daily: { available: false },
+              weekly: { available: false },
+              monthly: { available: false },
+            },
+            recommendedActions: rawSummary.recommendedActions ?? [],
+            convictionHighlights: rawSummary.convictionHighlights ?? [],
+            materialRisks: rawSummary.materialRisks ?? null,
+            portfolioHealth: rawSummary.portfolioHealth ?? null,
+            biggestOpportunities: rawSummary.biggestOpportunities ?? [],
+            thesisChangesSinceYesterday: rawSummary.thesisChangesSinceYesterday ?? [],
+            changesSinceYesterday: rawSummary.changesSinceYesterday ?? null,
+            whatAtlasWouldDoToday: rawSummary.whatAtlasWouldDoToday ?? [],
+            whatAtlasWouldAvoidToday: rawSummary.whatAtlasWouldAvoidToday ?? [],
+          };
           const recap = briefing.marketRecap as unknown as MarketRecapShape;
 
           return (
@@ -117,6 +154,25 @@ export default async function BriefingPage() {
                   sublabel={summary.largestLoser ? formatPercent(summary.largestLoser.changePercent) : undefined}
                   tone="negative"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard label="Cash available" value={summary.cashBalance !== null ? formatCurrency(summary.cashBalance) : 'n/a'} />
+                <StatCard label="Capital deployed" value={summary.capitalDeployed !== null ? formatCurrency(summary.capitalDeployed) : 'n/a'} />
+                {summary.changesSinceYesterday && (
+                  <>
+                    <StatCard
+                      label="Value since yesterday"
+                      value={summary.changesSinceYesterday.totalValueDelta !== null ? formatCurrency(summary.changesSinceYesterday.totalValueDelta) : 'n/a'}
+                      tone={(summary.changesSinceYesterday.totalValueDelta ?? 0) >= 0 ? 'positive' : 'negative'}
+                    />
+                    <StatCard
+                      label="Health since yesterday"
+                      value={summary.changesSinceYesterday.healthScoreDelta !== null ? `${summary.changesSinceYesterday.healthScoreDelta >= 0 ? '+' : ''}${summary.changesSinceYesterday.healthScoreDelta}` : 'n/a'}
+                      tone={(summary.changesSinceYesterday.healthScoreDelta ?? 0) >= 0 ? 'positive' : 'negative'}
+                    />
+                  </>
+                )}
               </div>
 
               <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
@@ -219,6 +275,73 @@ export default async function BriefingPage() {
                   ))}
                 </div>
               </section>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <section className="rounded-lg border border-risk-low/30 bg-risk-low/5 p-5">
+                  <h2 className="mb-3 font-semibold">What Atlas would do today</h2>
+                  {summary.whatAtlasWouldDoToday.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nothing with enough conviction to act on today.</p>
+                  ) : (
+                    <ul className="list-inside list-disc space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                      {summary.whatAtlasWouldDoToday.map((t, i) => (
+                        <li key={i}>{t}</li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
+                  <h2 className="mb-3 font-semibold">What Atlas would avoid today</h2>
+                  {summary.whatAtlasWouldAvoidToday.length === 0 ? (
+                    <p className="text-sm text-gray-500">No fresh low-conviction calls today.</p>
+                  ) : (
+                    <ul className="list-inside list-disc space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                      {summary.whatAtlasWouldAvoidToday.map((t, i) => (
+                        <li key={i}>{t}</li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </div>
+
+              {summary.biggestOpportunities.length > 0 && (
+                <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
+                  <h2 className="mb-3 font-semibold">
+                    Biggest opportunities{' '}
+                    <Link href="/opportunities" className="text-xs font-normal text-gray-500 underline">
+                      view all
+                    </Link>
+                  </h2>
+                  <div className="space-y-2 text-sm">
+                    {summary.biggestOpportunities.map((o) => (
+                      <div key={o.symbol} className="flex items-center justify-between">
+                        <span className="font-medium">
+                          {o.symbol} <span className="font-normal text-gray-500">— {o.name}</span>
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          confidence {o.confidenceScore}/10{o.comparedTo ? ` · vs ${o.comparedTo}: ${o.overallEdge?.toLowerCase().replace(/_/g, ' ')}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {summary.thesisChangesSinceYesterday.length > 0 && (
+                <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
+                  <h2 className="mb-3 font-semibold">Thesis changes since yesterday</h2>
+                  <ul className="space-y-2 text-sm">
+                    {summary.thesisChangesSinceYesterday.map((c, i) => (
+                      <li key={i}>
+                        <Link href={`/intelligence/${c.symbol}`} className="font-medium underline">
+                          {c.symbol}
+                        </Link>{' '}
+                        <span className="text-xs text-gray-500 dark:text-gray-400">({c.changeType.replace(/_/g, ' ').toLowerCase()})</span>
+                        {c.whatChanged && <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{c.whatChanged}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
                 <h2 className="mb-2 font-semibold">Notes</h2>
