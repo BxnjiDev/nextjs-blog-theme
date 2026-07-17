@@ -1,16 +1,21 @@
 // Atlas portfolio intelligence data model.
 //
 // Design notes:
-// - This schema is the system of record for Atlas's OWN analysis (recommendations,
-//   risk scores, briefings, trade proposals). It is NOT a cache of brokerage truth —
-//   Account/Holding/Transaction rows are synced FROM the connected brokerage
-//   (Robinhood Agentic Trading, via its MCP server) and should be treated as
-//   read-mostly mirrors, not edited directly by app logic.
-// - TradeProposal is the only path to order placement. Nothing in this schema
-//   represents "fire and forget" autonomous execution: every row starts at
-//   PENDING_APPROVAL and only advances via an explicit decision, logged with
-//   reasoning + confidence + supporting data, per the spec's approval-gate
-//   requirement.
+// - This schema is the system of record for Atlas's OWN analysis
+//   (recommendations, risk scores, briefings, data-quality verdicts). It is
+//   NOT a cache of brokerage truth — Account/Holding/Transaction/OpenOrder
+//   rows are synced FROM the connected brokerage (Robinhood Agentic
+//   Trading, via its MCP server) and should be treated as read-mostly
+//   mirrors, not edited directly by app logic.
+// - There is no order-placement path anywhere in this schema. An earlier
+//   TradeProposal model (with a MANUAL_APPROVAL/AUTONOMOUS mode) was
+//   removed in Phase 3.7 — it was never wired to anything, but its shape
+//   (orderType/limitPrice/stopPrice, an AUTONOMOUS mode) was itself a risk
+//   the phase's execution-boundary review flagged. ManualExecution is its
+//   replacement for tracking trades: strictly a record of what the user
+//   already did, reconciled against the next real Robinhood sync — never a
+//   request Atlas acts on. See ARCHITECTURE.md's "Execution boundary"
+//   section and lib/domain/executionReconciliation.ts.
 
 generator client {
   provider = "prisma-client-js"
@@ -128,24 +133,10 @@ enum AlertSeverity {
   URGENT
 }
 
-enum TradeMode {
-  MANUAL_APPROVAL
-  AUTONOMOUS
-}
-
 enum OrderType {
   MARKET
   LIMIT
   STOP
-}
-
-enum TradeProposalStatus {
-  PENDING_APPROVAL
-  APPROVED
-  REJECTED
-  EXECUTED
-  CANCELLED
-  EXPIRED
 }
 
 /// What the user actually did with a recommendation. ACCEPTED/
@@ -167,6 +158,44 @@ enum ProviderCallOutcome {
   FALLBACK
 }
 
+/// How a manually-recorded execution (ManualExecution — a trade the user
+/// placed themselves in Robinhood, never something Atlas submitted)
+/// compares against the real brokerage Transaction the next sync ingests.
+/// Set by lib/domain/executionReconciliation.ts; never implies Atlas
+/// caused, previewed, or approved the trade — only that it was told about
+/// it and is checking its own record against reality.
+enum ExecutionMatchStatus {
+  PENDING
+  MATCHED
+  PARTIALLY_MATCHED
+  UNMATCHED
+  AMOUNT_MISMATCH
+  QUANTITY_MISMATCH
+  PRICE_MISMATCH
+  TIMING_MISMATCH
+}
+
+/// Verdict from lib/domain/dataQualityGate.ts, evaluated BEFORE a
+/// recommendation is generated. BLOCKED means no Recommendation row is
+/// created at all for that symbol on that run (see DataQualityGateLog) —
+/// Atlas never fabricates a recommendation just to have an answer.
+enum DataQualityStatus {
+  PASS
+  PASS_WITH_WARNINGS
+  BLOCKED
+}
+
+/// Outcome of one lib/domain/scheduler.ts job execution — the local
+/// operational scheduler's run history (SchedulerRun), independent of the
+/// ad hoc {ok,result,errors} JSON individual /api/jobs/* routes return.
+enum SchedulerRunStatus {
+  RUNNING
+  SUCCESS
+  WARNING
+  FAILURE
+  SKIPPED
+}
+
 /// A connected brokerage account (e.g. a Robinhood Agentic Trading account).
 /// Populated by syncing from the brokerage integration, not hand-edited.
 model Account {
@@ -184,11 +213,11 @@ model Account {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  holdings       Holding[]
-  transactions   Transaction[]
-  tradeProposals TradeProposal[]
-  openOrders     OpenOrder[]
-  syncLogs       SyncLog[]
+  holdings          Holding[]
+  transactions      Transaction[]
+  openOrders        OpenOrder[]
+  syncLogs          SyncLog[]
+  manualExecutions  ManualExecution[]
 }
 
 /// A current position, mirrored from the brokerage account.
@@ -228,6 +257,8 @@ model Transaction {
   source     TransactionSource @default(MANUAL)
   externalId String?           @unique // brokerage order/fill id
   executedAt DateTime
+
+  manualExecution ManualExecution?
 
   @@index([symbol])
   @@index([executedAt])
@@ -301,10 +332,19 @@ model Recommendation {
   /// (quote/fundamentals asOf + quality, filing count, news count) — lets
   /// the dashboard show exactly how current an analysis is.
   sourcesMeta            Json?
+  /// The data-quality gate's verdict (lib/domain/dataQualityGate.ts) at
+  /// generation time, denormalized here for fast display — PASS/
+  /// PASS_WITH_WARNINGS only, since a BLOCKED verdict never produces a
+  /// Recommendation row (see DataQualityGateLog for the full audit trail,
+  /// including blocked attempts). Nullable only because recommendations
+  /// created before this phase have no gate verdict on record.
+  dataQualityStatus      DataQualityStatus?
+  dataQualityChecks      Json?
   previousId             String?                @unique
   previous               Recommendation?        @relation("RecommendationHistory", fields: [previousId], references: [id])
   next                   Recommendation?        @relation("RecommendationHistory")
   outcome                RecommendationOutcome?
+  manualExecutions       ManualExecution[]
   generatedAt            DateTime               @default(now())
 
   @@index([symbol, generatedAt])
@@ -429,31 +469,6 @@ model Alert {
 /// enabled AUTONOMOUS mode, a policy-gated auto-approval) moves it forward.
 /// Execution itself happens via the Robinhood Agentic Trading MCP
 /// connector, not a stored-credential REST call — see ARCHITECTURE.md.
-model TradeProposal {
-  id               String              @id @default(cuid())
-  accountId        String
-  account          Account             @relation(fields: [accountId], references: [id])
-  symbol           String
-  side             TradeSide
-  quantity         Decimal
-  orderType        OrderType
-  limitPrice       Decimal?
-  stopPrice        Decimal?
-  mode             TradeMode           @default(MANUAL_APPROVAL)
-  reasoning        String
-  confidenceScore  Int // 1-10
-  supportingData   Json
-  reversible       Boolean             @default(true)
-  status           TradeProposalStatus @default(PENDING_APPROVAL)
-  robinhoodOrderId String?             @unique
-  createdAt        DateTime            @default(now())
-  decidedAt        DateTime?
-  executedAt       DateTime?
-
-  @@index([status])
-  @@index([symbol])
-}
-
 // ---------------------------------------------------------------------------
 // Phase 2: persistent thesis engine, conviction engine, portfolio health,
 // opportunity comparisons, and recommendation-outcome (performance
@@ -948,6 +963,11 @@ model SyncLog {
   recordsSkipped Int       @default(0)
   errors         Json      @default("[]")
   warnings       Json      @default("[]")
+  /// Structured field-by-field Atlas-vs-Robinhood comparison (Phase 3.7) —
+  /// see lib/domain/accountSync.ts ReconciliationDetail. `warnings` above
+  /// stays free-text for backward compatibility; this is the same
+  /// comparisons, machine-readable, consumed by scripts/validateFirstSync.ts.
+  reconciliationDetails Json @default("[]")
   syncedAt       DateTime  @default(now())
 
   @@index([syncedAt])
@@ -977,4 +997,111 @@ model ProviderCallLog {
   calledAt  DateTime            @default(now())
 
   @@index([provider, calledAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3.7: live validation & operational readiness. ManualExecution is
+// purely a record of what the user already did in Robinhood — nothing here
+// (or anywhere else in this schema) represents an order Atlas can submit,
+// preview, cancel, or modify. DataQualityGateLog is the audit trail for the
+// gate that runs before every recommendation, including attempts it
+// blocked. SchedulerRun/SchedulerLock/SchedulerJobConfig back the local
+// operational scheduler (lib/domain/scheduler.ts) that replaces
+// reliance on Vercel Cron for MacBook use.
+// ---------------------------------------------------------------------------
+
+/// A trade the user manually executed themselves (in Robinhood or
+/// elsewhere) and is reporting to Atlas for record-keeping — recording one
+/// of these NEVER triggers, previews, or otherwise causes a trade. The next
+/// Robinhood sync's post-sync pipeline step
+/// (lib/domain/executionReconciliation.ts) attempts to match it against a
+/// real synced Transaction using configurable tolerances and records how
+/// well they line up in `matchStatus`.
+model ManualExecution {
+  id               String               @id @default(cuid())
+  accountId        String
+  account          Account              @relation(fields: [accountId], references: [id])
+  symbol           String
+  side             TradeSide
+  executedAt       DateTime
+  quantity         Decimal
+  dollarAmount     Decimal
+  executionPrice   Decimal
+  fees             Decimal              @default(0)
+  note             String?
+  recommendationId String?
+  recommendation   Recommendation?      @relation(fields: [recommendationId], references: [id])
+  matchStatus      ExecutionMatchStatus @default(PENDING)
+  matchedTransactionId String?          @unique
+  matchedTransaction   Transaction?     @relation(fields: [matchedTransactionId], references: [id])
+  reconciledAt     DateTime?
+  reconciliationNote String?
+  recordedAt       DateTime             @default(now())
+
+  @@index([accountId, symbol])
+  @@index([matchStatus])
+}
+
+/// Audit trail of every data-quality gate evaluation
+/// (lib/domain/dataQualityGate.ts) — including BLOCKED ones, which are the
+/// only record such an attempt leaves, since a blocked evaluation
+/// deliberately produces no Recommendation row rather than a fabricated
+/// one. PASS/PASS_WITH_WARNINGS evaluations are also denormalized onto the
+/// Recommendation row itself (dataQualityStatus/dataQualityChecks) for
+/// fast display; this table is the append-only history, including blocks.
+model DataQualityGateLog {
+  id        String            @id @default(cuid())
+  symbol    String
+  accountId String?
+  status    DataQualityStatus
+  checks    Json
+  checkedAt DateTime          @default(now())
+
+  @@index([symbol, checkedAt])
+  @@index([status])
+}
+
+/// One row per scheduler job execution attempt — the run history required
+/// by the local operational scheduler (lib/domain/scheduler.ts,
+/// scripts/scheduler.ts). Distinct from SyncLog (account-sync-specific
+/// audit) and the ad hoc {ok,result,errors} JSON each /api/jobs/* route
+/// returns today — this is the first durable, queryable record of "did job
+/// X run, when, how long, with what result," across every job in the app.
+model SchedulerRun {
+  id         String             @id @default(cuid())
+  jobName    String
+  status     SchedulerRunStatus @default(RUNNING)
+  trigger    String // "scheduled" | "manual"
+  attempt    Int                @default(1)
+  startedAt  DateTime           @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+  result     Json?
+  error      String?
+  warnings   Json               @default("[]")
+
+  @@index([jobName, startedAt])
+  @@index([status])
+}
+
+/// Lease-based lock preventing two overlapping runs of the same job — held
+/// only while that job is actually running, with an expiry so a
+/// crashed/killed process (e.g. the MacBook slept mid-run) can't
+/// permanently wedge future runs of that job.
+model SchedulerLock {
+  jobName    String   @id
+  lockedAt   DateTime @default(now())
+  leaseUntil DateTime
+  holder     String // hostname:pid, informational only
+
+  @@index([leaseUntil])
+}
+
+/// Per-job enabled/disabled flag, toggleable from the CLI and visible on
+/// the ops dashboard. A disabled job's scheduled runs are skipped (recorded
+/// in SchedulerRun with status SKIPPED) rather than silently not happening.
+model SchedulerJobConfig {
+  jobName   String   @id
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
 }

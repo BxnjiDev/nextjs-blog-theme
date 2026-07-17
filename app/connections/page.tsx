@@ -1,17 +1,11 @@
 import { prisma } from '@/lib/prisma';
 import { resolveAnthropicModel } from '@/lib/integrations';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
+import { getGlobalStatus } from '@/lib/domain/globalStatus';
+import { getSchedulerStatus, JOB_REGISTRY } from '@/lib/domain/scheduler';
+import { rerunJob } from './actions';
 
 export const dynamic = 'force-dynamic';
-
-async function checkDb(): Promise<{ ok: boolean; detail: string }> {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return { ok: true, detail: 'Connected' };
-  } catch (err) {
-    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
-  }
-}
 
 async function checkEdgarReachable(): Promise<{ ok: boolean; detail: string }> {
   try {
@@ -44,6 +38,22 @@ const STALENESS_LABEL: Record<string, string> = {
   aging: 'Aging',
   stale: 'Stale',
   unknown: 'No data yet',
+};
+
+const RUN_STATUS_STYLES: Record<string, string> = {
+  SUCCESS: 'bg-risk-low/10 text-risk-low',
+  WARNING: 'bg-risk-medium/10 text-risk-medium',
+  FAILURE: 'bg-risk-high/10 text-risk-high',
+  RUNNING: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+  SKIPPED: 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+};
+
+const MATCH_STATUS_STYLES: Record<string, string> = {
+  UNMATCHED: 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  AMOUNT_MISMATCH: 'bg-risk-high/10 text-risk-high',
+  QUANTITY_MISMATCH: 'bg-risk-high/10 text-risk-high',
+  PRICE_MISMATCH: 'bg-risk-high/10 text-risk-high',
+  TIMING_MISMATCH: 'bg-risk-medium/10 text-risk-medium',
 };
 
 /** Renders the shared getDataFreshnessSnapshot() fields for one provider —
@@ -88,9 +98,10 @@ export default async function ConnectionsPage() {
   const hasSyncSecret = Boolean(process.env.SYNC_SECRET);
 
   const [
-    db,
     edgar,
     freshness,
+    globalStatus,
+    schedulerStatus,
     latestSnapshot,
     latestRecommendation,
     latestBriefing,
@@ -104,15 +115,18 @@ export default async function ConnectionsPage() {
     latestScorecard,
     evaluationAccount,
     recentSyncLogs,
+    recentBlockedGates,
+    unresolvedExecutions,
   ] = await Promise.all([
-    checkDb(),
     checkEdgarReachable(),
     // Single shared source for "when did each real data provider last
     // update, and how reliable/fast has it been" — also used by the
-    // Investment Memo page (FreshnessStrip). Covers news/fundamentals/SEC
-    // filing freshness below instead of each page running its own copy of
-    // those "latest row" queries.
+    // Investment Memo page (FreshnessStrip). Deliberately DB-only (no live
+    // pings) since this page renders on every request — `npm run
+    // providers:check` is the live-authenticated check.
     getDataFreshnessSnapshot(),
+    getGlobalStatus(),
+    getSchedulerStatus(),
     prisma.performanceSnapshot.findFirst({ orderBy: { date: 'desc' } }),
     prisma.recommendation.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.briefing.findFirst({ orderBy: { date: 'desc' } }),
@@ -126,6 +140,12 @@ export default async function ConnectionsPage() {
     prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.account.findFirst({ where: { isEvaluationAccount: true } }),
     prisma.syncLog.findMany({ orderBy: { syncedAt: 'desc' }, take: 10 }),
+    prisma.dataQualityGateLog.findMany({ where: { status: 'BLOCKED' }, orderBy: { checkedAt: 'desc' }, take: 15 }),
+    prisma.manualExecution.findMany({
+      where: { matchStatus: { in: ['UNMATCHED', 'AMOUNT_MISMATCH', 'QUANTITY_MISMATCH', 'PRICE_MISMATCH', 'TIMING_MISMATCH'] } },
+      orderBy: { recordedAt: 'desc' },
+      take: 20,
+    }),
   ]);
 
   const freshnessByProvider = new Map(freshness.map((f) => [f.provider, f]));
@@ -135,20 +155,171 @@ export default async function ConnectionsPage() {
   const secFreshness = freshnessByProvider.get('sec-edgar') ?? null;
   const claudeFreshness = freshnessByProvider.get('claude') ?? null;
 
+  const runningJobs = schedulerStatus.filter((s) => s.locked);
+  const failedJobs = schedulerStatus.filter((s) => s.lastRun?.status === 'FAILURE');
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Connections &amp; Health</h1>
+        <h1 className="text-2xl font-semibold">Connections &amp; Operations</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          What Atlas is actually connected to right now, and when each background job last ran.
+          What Atlas is connected to, whether each provider is safe to trust right now, and the full status of every
+          background job — scheduled, running, or failed.
         </p>
       </div>
 
       <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+        <h2 className="mb-3 font-medium">Operating status</h2>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Operating mode</p>
+            <p className={`text-lg font-semibold ${globalStatus.mode === 'live-evaluation' ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+              {globalStatus.mode}
+            </p>
+          </div>
+          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Last Robinhood sync</p>
+            <p className="text-sm font-medium">
+              {globalStatus.robinhoodSync.lastSyncedAt
+                ? `${globalStatus.robinhoodSync.success ? 'ok' : 'rejected'} · ${globalStatus.robinhoodSync.ageHours!.toFixed(1)}h ago`
+                : 'Never synced'}
+            </p>
+          </div>
+          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Last complete pipeline run</p>
+            <p className="text-sm font-medium">
+              {globalStatus.lastFullIntelligenceRunAt ? globalStatus.lastFullIntelligenceRunAt.toLocaleString() : 'Never run'}
+            </p>
+          </div>
+          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Running / failed jobs</p>
+            <p className="text-sm font-medium">
+              <span className={runningJobs.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}>{runningJobs.length} running</span>
+              {' · '}
+              <span className={failedJobs.length > 0 ? 'text-risk-high' : ''}>{failedJobs.length} failed</span>
+            </p>
+          </div>
+        </div>
+        {globalStatus.mode === 'live-evaluation' && (
+          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+            Live-evaluation mode — recommendations are blocked rather than generated from mock market data,
+            fundamentals, or a stale account. See &ldquo;Data-quality blocks&rdquo; below for any that were.
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-medium">Scheduled jobs</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Reruns here are always safe — every job is read/analyze/record only, never able to submit a trade
+            (see <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/executionBoundary.test.ts</code>).
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <th className="py-1 pr-2">Job</th>
+                <th className="py-1 pr-2">Enabled</th>
+                <th className="py-1 pr-2">Status</th>
+                <th className="py-1 pr-2">Last run</th>
+                <th className="py-1 pr-2">Duration</th>
+                <th className="py-1 pr-2">Retry attempts</th>
+                <th className="py-1 pr-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedulerStatus.map((s) => (
+                <tr key={s.jobName} className="border-b border-gray-50 dark:border-gray-900">
+                  <td className="py-1.5 pr-2 font-medium">{s.label}</td>
+                  <td className="py-1.5 pr-2">{s.enabled ? 'yes' : 'disabled'}</td>
+                  <td className="py-1.5 pr-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RUN_STATUS_STYLES[s.locked ? 'RUNNING' : s.lastRun?.status ?? 'SKIPPED']}`}>
+                      {s.locked ? 'RUNNING' : (s.lastRun?.status ?? 'never run')}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-2 text-xs text-gray-500 dark:text-gray-400">
+                    {s.lastRun ? `${s.lastRun.startedAt.toLocaleString()} (${s.lastRun.trigger})` : '—'}
+                    {s.lastRun?.error && <p className="text-risk-high">{s.lastRun.error}</p>}
+                  </td>
+                  <td className="py-1.5 pr-2 text-xs text-gray-500 dark:text-gray-400">{s.lastRun?.durationMs !== null && s.lastRun?.durationMs !== undefined ? `${s.lastRun.durationMs}ms` : '—'}</td>
+                  <td className="py-1.5 pr-2 text-xs text-gray-500 dark:text-gray-400">{s.lastRun ? 1 : 0}</td>
+                  <td className="py-1.5 pr-2">
+                    <form action={rerunJob.bind(null, s.jobName)}>
+                      <button type="submit" disabled={s.locked} className="rounded border border-gray-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-gray-700">
+                        {s.locked ? 'Running…' : 'Rerun'}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          For a full accounting from the terminal (including run-all): <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run scheduler -- status</code>.
+          Scheduling itself runs via launchd/cron — see <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">launchd/README.md</code>.
+        </p>
+        {Object.keys(JOB_REGISTRY).length !== schedulerStatus.length && (
+          <p className="mt-1 text-xs text-risk-medium">Job registry / status count mismatch — check lib/domain/scheduler.ts.</p>
+        )}
+      </section>
+
+      {recentBlockedGates.length > 0 && (
+        <section className="rounded-lg border border-risk-high/30 p-4 dark:border-risk-high/40">
+          <h2 className="mb-3 font-medium text-risk-high">Data-quality blocks</h2>
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            Recommendations the data-quality gate (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/dataQualityGate.ts</code>)
+            refused to generate — no fabricated recommendation was created for any of these.
+          </p>
+          <ul className="space-y-2 text-xs">
+            {recentBlockedGates.map((g) => {
+              const checks = g.checks as unknown as { name: string; status: string; detail: string }[];
+              const blocking = checks.filter((c) => c.status === 'blocking');
+              return (
+                <li key={g.id} className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{g.symbol}</span>
+                    <span className="text-gray-500 dark:text-gray-400">{g.checkedAt.toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 text-gray-600 dark:text-gray-400">{blocking.map((c) => c.detail).join(' ')}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {unresolvedExecutions.length > 0 && (
+        <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-medium">Unmatched manual executions &amp; reconciliation warnings</h2>
+            <a href="/executions" className="text-xs underline">
+              Record / view all →
+            </a>
+          </div>
+          <ul className="space-y-2 text-xs">
+            {unresolvedExecutions.map((e) => (
+              <li key={e.id} className="flex items-start justify-between gap-3 rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+                <div>
+                  <span className="font-medium">
+                    {e.symbol} · {e.side} · {Number(e.quantity)} sh @ ${Number(e.executionPrice).toFixed(2)}
+                  </span>
+                  <p className="mt-1 text-gray-600 dark:text-gray-400">{e.reconciliationNote ?? 'Awaiting next sync.'}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 font-medium ${MATCH_STATUS_STYLES[e.matchStatus] ?? ''}`}>
+                  {e.matchStatus.replace(/_/g, ' ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
         <h2 className="mb-3 font-medium">System health</h2>
         <div className="grid gap-2 sm:grid-cols-2">
-          <HealthRow label="Database" ok={db.ok} detail={db.detail} />
-          <HealthRow label="SEC EDGAR reachability" ok={edgar.ok} detail={edgar.detail} />
           <HealthRow
             label="Last portfolio refresh"
             ok={Boolean(latestSnapshot)}
@@ -223,7 +394,7 @@ export default async function ConnectionsPage() {
         {!hasCronSecret && (
           <p className="mt-3 text-xs text-risk-medium">
             CRON_SECRET is not set — the /api/jobs/* routes will refuse every request (including
-            Vercel Cron) until it&rsquo;s configured.
+            Vercel Cron) until it&rsquo;s configured. The local scheduler (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run scheduler</code>) doesn&rsquo;t need it.
           </p>
         )}
       </section>
@@ -292,7 +463,8 @@ export default async function ConnectionsPage() {
             CLI) or <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">POST /api/sync/account</code> — see{' '}
             <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/accountSync.ts</code>. Atlas never holds
             Robinhood credentials, session tokens, or MCP secrets, and never submits an order — every
-            trade is placed manually. See the banner at the top of every page.
+            trade is placed manually. See the banner at the top of every page, and
+            &ldquo;Execution boundary&rdquo; in ARCHITECTURE.md.
           </p>
         </div>
 
@@ -308,7 +480,9 @@ export default async function ConnectionsPage() {
             </a>{' '}
             key. Quotes are labeled &ldquo;Delayed&rdquo; (not real-time) even when live. A configured key that
             errors mid-request retries with backoff, then falls back to mock data for that call only —
-            every attempt is logged to ProviderCallLog.
+            every attempt is logged to ProviderCallLog. Run <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run providers:check</code> for a live
+            authenticated check (not run automatically on this page, to avoid pinging providers — including billed
+            Anthropic calls — on every page load).
           </p>
           <FreshnessLine freshness={marketDataFreshness} />
         </div>
@@ -364,8 +538,7 @@ export default async function ConnectionsPage() {
             key. Powers the historical financial-statement/ratio ingestion (
             <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/ingestFundamentals.ts</code>) and the forward earnings
             calendar (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/ingestEarnings.ts</code>), which together
-            populate the revenue-growth and balance-sheet conviction categories that were previously unavailable. This vendor could
-            not be live-tested in this sandbox (egress blocked, same as Twelve Data/SEC EDGAR) — see ARCHITECTURE.md.
+            populate the revenue-growth and balance-sheet conviction categories that were previously unavailable.
           </p>
           <FreshnessLine freshness={fundamentalsFreshness} />
         </div>

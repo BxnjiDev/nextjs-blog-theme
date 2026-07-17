@@ -1,9 +1,9 @@
 export * from './types';
-export { marketDataProvider } from './marketData';
-export { newsProvider, NEWS_SECTOR_TOPICS, sectorTopicForHoldingSector } from './news';
-export { secFilingsProvider } from './secFilings';
-export { fundamentalsProvider } from './fundamentals';
-export { aiReasoningProvider } from './aiReasoning';
+export { marketDataProvider, checkTwelveDataAuth } from './marketData';
+export { newsProvider, NEWS_SECTOR_TOPICS, sectorTopicForHoldingSector, checkFinnhubAuth } from './news';
+export { secFilingsProvider, checkSecEdgarReachability } from './secFilings';
+export { fundamentalsProvider, checkFmpAuth } from './fundamentals';
+export { aiReasoningProvider, checkClaudeAuth } from './aiReasoning';
 export type {
   AiReasoningProvider,
   HoldingAnalysisInput,

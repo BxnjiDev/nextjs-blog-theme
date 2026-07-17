@@ -394,4 +394,18 @@ export const fundamentalsProvider: FundamentalsProvider = process.env.FUNDAMENTA
   ? new FallbackFundamentalsProvider(new FinancialModelingPrepProvider(process.env.FUNDAMENTALS_API_KEY), mockFundamentalsProvider)
   : mockFundamentalsProvider;
 
+/** Bypasses the Fallback wrapper for a real auth check — see
+ * checkTwelveDataAuth in marketData.ts for why. */
+export async function checkFmpAuth(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const apiKey = process.env.FUNDAMENTALS_API_KEY;
+  if (!apiKey) return { ok: false, latencyMs: 0, error: 'FUNDAMENTALS_API_KEY is not set' };
+  const start = Date.now();
+  try {
+    await new FinancialModelingPrepProvider(apiKey).getValuationMetrics('AAPL');
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export type { DataQuality };

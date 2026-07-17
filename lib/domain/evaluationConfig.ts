@@ -34,3 +34,27 @@ export const EVALUATION_RULES_SUMMARY = [
 ] as const;
 
 export const EVALUATION_BANNER_TEXT = 'Recommendation-only evaluation mode. Trades are executed manually by the user.';
+
+/**
+ * Configurable tolerances for matching a manually-recorded execution
+ * (ManualExecution — see lib/domain/executionReconciliation.ts) against the
+ * real Transaction the next Robinhood sync ingests. All overridable via env
+ * for testing without touching the defaults that apply to real use.
+ */
+export const EXECUTION_MATCH_PRICE_TOLERANCE_PCT = Number(process.env.EXECUTION_MATCH_PRICE_TOLERANCE_PCT ?? 0.02);
+export const EXECUTION_MATCH_QUANTITY_TOLERANCE_PCT = Number(process.env.EXECUTION_MATCH_QUANTITY_TOLERANCE_PCT ?? 0.01);
+export const EXECUTION_MATCH_AMOUNT_TOLERANCE_PCT = Number(process.env.EXECUTION_MATCH_AMOUNT_TOLERANCE_PCT ?? 0.02);
+export const EXECUTION_MATCH_TIMING_TOLERANCE_HOURS = Number(process.env.EXECUTION_MATCH_TIMING_TOLERANCE_HOURS ?? 24);
+/** How far to search for a candidate transaction at all before giving up
+ * and calling it UNMATCHED — wider than the timing tolerance above, which
+ * governs whether a found candidate counts as a clean match vs. a
+ * TIMING_MISMATCH. */
+export const EXECUTION_MATCH_SEARCH_WINDOW_DAYS = Number(process.env.EXECUTION_MATCH_SEARCH_WINDOW_DAYS ?? 14);
+/** Fees are often estimated by the user ahead of the real fill, so this is
+ * intentionally loose and informational only — it never changes
+ * matchStatus by itself, only the reconciliation note. */
+export const EXECUTION_MATCH_FEES_TOLERANCE_PCT = Number(process.env.EXECUTION_MATCH_FEES_TOLERANCE_PCT ?? 0.5);
+/** Below this fraction of the reported quantity actually found, a partial
+ * fill reads as too different to call "partial" — it's treated as a
+ * quantity mismatch instead. */
+export const EXECUTION_MATCH_MIN_PARTIAL_FRACTION = 0.1;

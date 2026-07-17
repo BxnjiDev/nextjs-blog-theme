@@ -633,3 +633,24 @@ function createAiReasoningProvider(): AiReasoningProvider {
 }
 
 export const aiReasoningProvider: AiReasoningProvider = createAiReasoningProvider();
+
+/**
+ * A real, minimal (max_tokens: 1, no thinking, no structured output) Claude
+ * call to verify the API key and configured model actually work — used
+ * only by the provider-readiness check (`npm run providers:check`), never
+ * by normal recommendation generation, since a genuine auth/model failure
+ * should surface there rather than silently degrade to the heuristic
+ * fallback the way every other call site correctly does.
+ */
+export async function checkClaudeAuth(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, latencyMs: 0, error: 'ANTHROPIC_API_KEY is not set' };
+  const start = Date.now();
+  try {
+    const model = resolveAnthropicModel();
+    const client = new Anthropic();
+    await client.messages.create({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] });
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : String(err) };
+  }
+}

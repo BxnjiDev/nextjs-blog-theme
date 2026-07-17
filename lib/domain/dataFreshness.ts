@@ -29,7 +29,7 @@ function classifyStaleness(lastUpdated: Date | null): Staleness {
  * table lib/integrations/retry.ts writes to on every real provider call.
  * Returns nulls (not zeros) when nothing has been logged yet, so "no data"
  * is never confused with "0% reliable." */
-async function callStats(provider: string): Promise<{ reliabilityPct: number | null; avgLatencyMs: number | null }> {
+export async function callStats(provider: string): Promise<{ reliabilityPct: number | null; avgLatencyMs: number | null }> {
   const recent = await prisma.providerCallLog.findMany({
     where: { provider },
     orderBy: { calledAt: 'desc' },

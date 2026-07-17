@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "asOf": "2026-07-17T14:00:00.000Z",
+  "accountExternalId": "SAMPLE-EVAL-ACCOUNT-0001",
+  "isEvaluationAccount": true,
+  "cashBalance": 112.40,
+  "buyingPower": 112.40,
+  "holdings": [
+    {
+      "symbol": "MSFT",
+      "name": "Microsoft Corporation",
+      "assetClass": "EQUITY",
+      "sector": "Technology",
+      "quantity": 1,
+      "avgCostBasis": 387.65,
+      "marketValue": 387.65,
+      "unrealizedPnl": 0,
+      "unrealizedPnlPercent": 0,
+      "realizedPnl": 0
+    }
+  ],
+  "transactions": [
+    {
+      "externalId": "SAMPLE-FILL-0001",
+      "symbol": "MSFT",
+      "side": "BUY",
+      "quantity": 1,
+      "price": 387.65,
+      "executedAt": "2026-07-10T15:32:00.000Z"
+    }
+  ],
+  "openOrders": []
+}

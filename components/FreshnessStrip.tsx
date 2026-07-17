@@ -1,6 +1,8 @@
 import type { DataSourceFreshness } from '@/lib/domain/dataFreshness';
 
-const STALENESS_STYLES: Record<string, string> = {
+/** Shared with components/StatusIndicator.tsx (the site-wide header strip)
+ * so staleness reads the same color everywhere in the app. */
+export const STALENESS_STYLES: Record<string, string> = {
   fresh: 'bg-risk-low/10 text-risk-low',
   aging: 'bg-risk-medium/10 text-risk-medium',
   stale: 'bg-risk-high/10 text-risk-high',

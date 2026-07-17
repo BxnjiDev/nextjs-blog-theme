@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import '../styles/globals.css';
 import Nav from '@/components/Nav';
 import EvaluationBanner from '@/components/EvaluationBanner';
+import StatusIndicator from '@/components/StatusIndicator';
 import { prisma } from '@/lib/prisma';
+import { getGlobalStatus } from '@/lib/domain/globalStatus';
 
 export const metadata: Metadata = {
   title: 'Atlas — Portfolio Intelligence',
@@ -15,12 +17,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // build-time flag — it's true whenever a synced account has been marked
   // isEvaluationAccount (lib/domain/accountSync.ts), so it never goes out
   // of sync with what's actually connected.
-  const evaluationAccount = await prisma.account.findFirst({ where: { isEvaluationAccount: true } }).catch(() => null);
+  const [evaluationAccount, status] = await Promise.all([
+    prisma.account.findFirst({ where: { isEvaluationAccount: true } }).catch(() => null),
+    getGlobalStatus(),
+  ]);
 
   return (
     <html lang="en">
       <body>
         {evaluationAccount && <EvaluationBanner />}
+        <StatusIndicator status={status} />
         <Nav />
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
       </body>

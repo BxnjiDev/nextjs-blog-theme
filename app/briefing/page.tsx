@@ -3,56 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { formatCurrency, formatPercent } from '@/lib/format';
 import StatCard from '@/components/StatCard';
 import ActionBadge from '@/components/ActionBadge';
+import { normalizeBriefingPortfolioSummary, normalizeBriefingMarketRecap, type ReturnMetricShape } from '@/lib/domain/legacyNormalization';
 
 export const dynamic = 'force-dynamic';
-
-interface ReturnMetricShape {
-  available: boolean;
-  returnPercent?: number;
-  vsSp500Percent?: number;
-  note?: string;
-}
-
-interface PortfolioSummaryShape {
-  totalValue: number | null;
-  cashBalance: number | null;
-  capitalDeployed: number | null;
-  dayChangeValue: number | null;
-  dayChangePercent: number | null;
-  sp500Level: number | null;
-  largestWinner: { symbol: string; changePercent: number } | null;
-  largestLoser: { symbol: string; changePercent: number } | null;
-  performance: { daily: ReturnMetricShape; weekly: ReturnMetricShape; monthly: ReturnMetricShape };
-  recommendedActions: Array<{ symbol: string; action: string | null; confidenceScore: number | null }>;
-  convictionHighlights: Array<{ symbol: string; convictionScore: number; lastReviewedAt: string }>;
-  materialRisks: { overallScore: number; previousScore: number | null; notes: string | null } | null;
-  portfolioHealth: { overallScore: number; previousScore: number | null; topConcerns: string[] } | null;
-  biggestOpportunities: Array<{ symbol: string; name: string; category: string; confidenceScore: number; comparedTo: string | null; overallEdge: string | null }>;
-  thesisChangesSinceYesterday: Array<{ symbol: string; changeType: string; whatChanged: string | null; createdAt: string }>;
-  changesSinceYesterday: { previousDate: string; totalValueDelta: number | null; healthScoreDelta: number | null; riskScoreDelta: number | null; newThesisChanges: number } | null;
-  whatAtlasWouldDoToday: string[];
-  whatAtlasWouldAvoidToday: string[];
-}
-
-interface PortfolioNewsItemShape {
-  symbol: string | null;
-  headline: string;
-  source: string;
-  url: string | null;
-  publishedAt: string;
-  materialityLevel: string;
-  whyItMatters: string;
-}
-
-interface MarketRecapShape {
-  portfolioNews: PortfolioNewsItemShape[];
-  upcomingEvents: Array<{
-    symbol: string;
-    mostRecentFiling: { formType: string; filedAt: string; url: string } | null;
-    nextEarnings: { reportDate: string; daysAway: number; epsEstimate: number | null; fiscalPeriod: string; fiscalYear: number } | null;
-  }>;
-  notes: string[];
-}
 
 function ReturnRow({ label, metric }: { label: string; metric: ReturnMetricShape }) {
   if (!metric.available) {
@@ -95,38 +48,8 @@ export default async function BriefingPage() {
         </div>
       ) : (
         (() => {
-          // Briefings generated before Phase 3.6 don't have these fields in
-          // their stored JSON at all (JSON.stringify drops `undefined` keys
-          // entirely) — defaulted here, once, rather than optional-chaining
-          // every call site below, so an old row renders instead of
-          // crashing on `undefined.length` / formatCurrency(undefined).
-          const rawSummary = briefing.portfolioSummary as unknown as Partial<PortfolioSummaryShape>;
-          const summary: PortfolioSummaryShape = {
-            ...rawSummary,
-            totalValue: rawSummary.totalValue ?? null,
-            cashBalance: rawSummary.cashBalance ?? null,
-            capitalDeployed: rawSummary.capitalDeployed ?? null,
-            dayChangeValue: rawSummary.dayChangeValue ?? null,
-            dayChangePercent: rawSummary.dayChangePercent ?? null,
-            sp500Level: rawSummary.sp500Level ?? null,
-            largestWinner: rawSummary.largestWinner ?? null,
-            largestLoser: rawSummary.largestLoser ?? null,
-            performance: rawSummary.performance ?? {
-              daily: { available: false },
-              weekly: { available: false },
-              monthly: { available: false },
-            },
-            recommendedActions: rawSummary.recommendedActions ?? [],
-            convictionHighlights: rawSummary.convictionHighlights ?? [],
-            materialRisks: rawSummary.materialRisks ?? null,
-            portfolioHealth: rawSummary.portfolioHealth ?? null,
-            biggestOpportunities: rawSummary.biggestOpportunities ?? [],
-            thesisChangesSinceYesterday: rawSummary.thesisChangesSinceYesterday ?? [],
-            changesSinceYesterday: rawSummary.changesSinceYesterday ?? null,
-            whatAtlasWouldDoToday: rawSummary.whatAtlasWouldDoToday ?? [],
-            whatAtlasWouldAvoidToday: rawSummary.whatAtlasWouldAvoidToday ?? [],
-          };
-          const recap = briefing.marketRecap as unknown as MarketRecapShape;
+          const summary = normalizeBriefingPortfolioSummary(briefing.portfolioSummary);
+          const recap = normalizeBriefingMarketRecap(briefing.marketRecap);
 
           return (
             <div className="space-y-6">

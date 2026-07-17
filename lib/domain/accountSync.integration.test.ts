@@ -65,6 +65,13 @@ describe('syncAccount idempotency', () => {
 
     const txnCount = await prisma.transaction.count({ where: { externalId: 'atlas-test-txn-1' } });
     expect(txnCount).toBe(1);
+
+    // Structured reconciliation detail (Phase 3.7) — same underlying
+    // comparisons as `warnings`, machine-readable for validateFirstSync.ts.
+    expect(result.reconciliationDetails.length).toBeGreaterThan(0);
+    const txnDetail = result.reconciliationDetails.find((d) => d.field === 'transactions');
+    expect(txnDetail).toBeDefined();
+    expect(txnDetail?.status).toBe('MATCH');
   });
 
   it('re-syncing the identical payload skips the already-recorded transaction instead of erroring or duplicating it', async () => {

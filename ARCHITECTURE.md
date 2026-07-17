@@ -64,11 +64,15 @@ claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mc
 An AI agent session connects to that MCP server directly to read the agentic
 account and place orders; Robinhood previews every order with the account
 owner before it executes. Atlas's Next.js app never holds brokerage
-credentials. Its job is to persist what the connected agent reports:
-account/holding/transaction/open-order state goes through
+credentials, and never connects to that MCP server itself — placing an
+order is something the user does in their own agent session, entirely
+outside this app. Atlas's job is to persist what's reported to it after
+the fact: account/holding/transaction/open-order state goes through
 `lib/domain/accountSync.ts` (see "Live-evaluation account sync" below), and
-`lib/integrations/robinhood.ts` exposes `recordExecution()` (marks a
-`TradeProposal` executed once the agent's MCP session confirms a fill).
+a trade the user manually executed is recorded via `ManualExecution` (see
+"Manual execution recording & reconciliation"), later reconciled against
+the next real sync. See "Execution boundary" below for the full boundary
+and the test that enforces it.
 
 ### What's real vs. mocked right now
 
@@ -495,6 +499,49 @@ can independently derive — never against itself:
 Mismatches beyond a tolerance become warnings on the sync result and in the
 `SyncLog` row — visible on `/connections` — never a silent overwrite.
 
+### First-live-sync validation report (Phase 3.7)
+
+The reconciliation checks above also build a structured, machine-readable
+twin of the warning text — `ReconciliationDetail[]` (`lib/domain/accountSync.ts`),
+one entry per field compared (`cashBalance`, `buyingPower`, `quantity`,
+`marketValue`, `unrealizedPnl`, `realizedPnl`, `totalEquity`, `avgCostBasis`,
+`transactions`, `openOrders`), whether it matched or not. Every entry carries
+`atlasValue`/`robinhoodValue` (`null` means "not available", never a stand-in
+for zero) and one of five statuses:
+
+- `MATCH` — exact agreement.
+- `TOLERANCE_MATCH` — within the configured tolerance, but not exact.
+- `MISMATCH` — outside tolerance.
+- `MISSING_FIELD` — Robinhood didn't report it (or Atlas couldn't
+  independently quote it).
+- `NOT_INDEPENDENTLY_VERIFIABLE` — Atlas has no way to compute this itself
+  (buying power, realized P&L, avg cost basis on a pre-Atlas position), so
+  the reported value is passed through and simply not checked.
+
+This is stored on `SyncLog.reconciliationDetails` alongside the existing
+`warnings`/`errors` — no computation is duplicated solely for the report; the
+same values that produce a warning string also produce a detail entry.
+`npm run sync:validate` (`scripts/validateFirstSync.ts`,
+`lib/domain/firstSyncValidation.ts`) reads the most recent `SyncLog` and
+prints this table plus an overall verdict:
+
+- `NOT_READY` — the sync itself failed, or a *critical* field (cash,
+  quantity, total equity, transaction/open-order record counts) mismatches.
+  Atlas's core picture of the account can't be trusted yet.
+- `READY_WITH_WARNINGS` — sync succeeded and no critical field mismatches,
+  but something disagreed within tolerance, is missing, or produced a
+  free-text warning (quote timing, provider rounding, an unverifiable
+  field).
+- `READY_FOR_RECOMMENDATION_ONLY_TESTING` — every checked field matches (or
+  is a fields Atlas genuinely can't verify independently) and there are no
+  warnings.
+
+Run this once after the first real Robinhood sync — before trusting Atlas's
+recommendations against that account — and again any time you want to
+re-confirm reconciliation health. Older `SyncLog` rows created before this
+migration have `reconciliationDetails: []`; the CLI prints a note that no
+structured comparison is available for them rather than fabricating one.
+
 ### Post-sync pipeline
 
 A successful sync runs the same six jobs already documented above
@@ -524,21 +571,124 @@ no `accountId` column at all — so with more than one account on record
 their numbers blend across accounts; this is a known, documented gap, not
 silently swept aside (see "What's not built yet").
 
-## The trade approval gate
+## Execution boundary (Phase 3.7)
 
-`TradeProposal` (see `prisma/schema.prisma`) is the only path to order
-placement in this design:
+Atlas has no path to order placement at all — not a gated one, not an
+opt-in one. This is a structural property of the codebase, not a runtime
+check: there is no HTTP client, SDK, or dependency anywhere in `app/`,
+`lib/`, or `scripts/` capable of calling Robinhood, and no function named
+or shaped like `placeOrder`/`submitOrder`/`previewOrder`/`cancelOrder`/
+`modifyOrder`. `lib/domain/executionBoundary.test.ts` asserts exactly
+this by scanning the real source tree — it fails the build if any of that
+capability is ever introduced, rather than relying on a runtime flag
+staying off.
 
-- Every proposal starts at `PENDING_APPROVAL` with `mode: MANUAL_APPROVAL`.
-- A proposal carries `reasoning`, `confidenceScore`, and `supportingData`
-  (JSON) — this is enforced by the schema, not left to convention.
-- `mode: AUTONOMOUS` exists as a future, explicitly-opted-in state per
-  account. Nothing in this codebase flips that switch or auto-approves a
-  proposal — that logic does not exist yet and should be treated as a
-  separate, carefully-reviewed feature when it's actually built, given it
-  controls real money.
-- Execution itself always happens through the agent's Robinhood MCP session,
-  never through a code path in this app that calls Robinhood directly.
+Concretely, Atlas may:
+
+- Read account state (via a human- or agent-reported sync payload — see
+  "Live-evaluation account sync" below)
+- Analyze the portfolio and generate recommendations
+- Record the user's decision on a recommendation (accepted / partially
+  accepted / rejected / deferred)
+- Record a trade the user says they already executed manually
+  (`ManualExecution` — see "Manual execution recording & reconciliation")
+- Reconcile the next Robinhood sync against that manual record
+
+Atlas may never: submit, preview, cancel, or modify an order, or treat
+acceptance of a recommendation as permission to trade. `OpenOrder` rows are
+a read-only mirror of what Robinhood reports — populated exclusively by
+`lib/domain/accountSync.ts`'s ingest path (also asserted by the boundary
+test), never constructed by Atlas as something to act on.
+
+An earlier `TradeProposal` model existed here (`PENDING_APPROVAL` →
+`APPROVED`/`REJECTED`/`EXECUTED`, with a `mode: MANUAL_APPROVAL |
+AUTONOMOUS` field and order fields — orderType/limitPrice/stopPrice).
+Nothing in the app ever created a `TradeProposal` row or read the
+`AUTONOMOUS` mode; it was scaffolding for a future feature that was never
+built. Phase 3.7 removed it: an unused model shaped like an order ticket,
+with an autonomous-execution mode sitting unused right next to it, was
+itself judged a risk worth closing off, independent of whether anything
+reachable used it. `ManualExecution` replaces the part of it that was
+actually needed (a durable record tied to a recommendation) with a shape
+that can't represent an order — only a report of one that already
+happened.
+
+## Manual execution recording & reconciliation (Phase 3.7)
+
+Completes the recommendation-to-outcome loop without any brokerage
+execution capability:
+
+1. Atlas generates a recommendation (`lib/jobs/generateRecommendations.ts`).
+2. The user marks it accepted/partially accepted/rejected/deferred
+   (`userDecision` — automatic for acceptance via
+   `lib/domain/recommendationDecisions.ts`, explicit via the Server Action
+   on `/recommendations` for rejection/deferral).
+3. If the user manually trades in Robinhood, they record it on `/executions`
+   (symbol, side, execution time, quantity, dollar amount, execution price,
+   fees, optional note, optional related recommendation) — a
+   `ManualExecution` row, `matchStatus: PENDING`.
+4. The next Robinhood sync's post-sync pipeline
+   (`lib/domain/accountSyncPipeline.ts`) runs
+   `lib/domain/executionReconciliation.ts`'s `reconcileManualExecutions()`
+   right after ingest, matching each still-PENDING `ManualExecution`
+   against the freshly-synced `Transaction` rows for that symbol/side
+   within a configurable search window
+   (`EXECUTION_MATCH_SEARCH_WINDOW_DAYS`, default 14 days).
+5. The result is one of `MATCHED` / `PARTIALLY_MATCHED` / `UNMATCHED` /
+   `AMOUNT_MISMATCH` / `QUANTITY_MISMATCH` / `PRICE_MISMATCH` /
+   `TIMING_MISMATCH`, using configurable tolerances
+   (`lib/domain/evaluationConfig.ts`: price 2%, quantity 1%, amount 2%,
+   timing 24h by default) — checked in that priority order (timing →
+   quantity → price → amount) since quantity/price discrepancies almost
+   always also fail the combined-amount check, and the more specific
+   diagnosis is more useful than the downstream consequence. A candidate
+   `Transaction` already claimed by another `ManualExecution` is never
+   reused (each real fill reconciles to at most one manual record).
+
+No step in this workflow creates, modifies, previews, or cancels anything
+on Robinhood's side — it only reads `Transaction` rows the sync already
+ingested and writes to `ManualExecution`. See
+`lib/domain/executionReconciliation.test.ts` (pure matching logic) and
+`lib/domain/executionReconciliation.integration.test.ts` (real DB).
+
+## Local operational scheduler (Phase 3.7)
+
+Replaces reliance on Vercel Cron for MacBook use. `lib/domain/scheduler.ts`
+wraps every existing job function (`runPortfolioRefreshJob`,
+`runRiskAssessmentJob`, ... the same functions `/api/jobs/*` already call —
+no job logic is duplicated) with:
+
+- **Locking** — an atomic `INSERT ... ON CONFLICT ... WHERE leaseUntil <
+  now()` against `SchedulerLock` (a real Postgres UPSERT-with-condition,
+  not a read-then-write race) so two overlapping invocations of the same
+  job can never run concurrently. The lease (20 min default) is released
+  immediately on completion; it only exists as a safety net if a run is
+  killed mid-flight.
+- **Retry** — each job call is wrapped in `lib/integrations/retry.ts`'s
+  `withRetry` (2 attempts, 5s base backoff) — the same retry primitive
+  Phase 3.6 built for provider calls, reused here at the job level.
+- **Run history** — every attempt writes a `SchedulerRun` row (status
+  `RUNNING` → `SUCCESS`/`WARNING`/`FAILURE`/`SKIPPED`, with duration,
+  attempt count, and the job's own result/error) — a durable, queryable
+  record `npm run scheduler -- status` and the `/connections` ops
+  dashboard both read.
+- **Enable/disable** — `SchedulerJobConfig` per job name; a disabled job's
+  scheduled run is recorded as `SKIPPED` (not silently dropped).
+
+Actual scheduling (the "when") is delegated to the OS — launchd (preferred)
+or crontab — rather than reimplemented here; see `launchd/README.md` for
+`.plist` templates and the crontab alternative, and the reasoning for why
+launchd's `StartCalendarInterval` (which fires a missed run once the Mac
+wakes) is the safer choice over plain cron (which just skips a missed
+run). Every job function already has its own idempotency/freshness window,
+so a job run late — or run twice back to back — never duplicates work;
+recovering from a missed run needs no special logic beyond what already
+exists.
+
+CLI: `npm run scheduler -- {list, status, run <job>, run-all, enable
+<job>, disable <job>}`. See `lib/domain/scheduler.test.ts` for the
+lock/retry/skip/history behavior verified against a real Postgres
+database.
 
 ## Background jobs
 
@@ -646,10 +796,10 @@ alert type at all, deliberately.
   account plus a synced evaluation account) their numbers blend across all
   of them. `getActiveAccountId()` scopes every other job correctly; adding
   `accountId` to these four models is the follow-up.
-- Automatic order placement of any kind, for the evaluation account or any
-  other — `OpenOrder` is a read-only mirror of what Robinhood reports, and
-  `TradeProposal.mode` stays `MANUAL_APPROVAL` throughout.
-- The autonomous-trading mode itself (see above).
+Automatic order placement is not on this list — it is not a "not built
+yet" gap, it's a structural property this codebase enforces (see
+"Execution boundary" above), not a scope decision that could just be
+revisited by adding a feature.
 
 ## Local development
 

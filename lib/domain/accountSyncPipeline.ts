@@ -5,6 +5,7 @@ import { runThesisJob } from '@/lib/jobs/generateThesis';
 import { runRecommendationJob } from '@/lib/jobs/generateRecommendations';
 import { runBriefingJob } from '@/lib/jobs/generateBriefing';
 import { detectRecommendationDecisions } from './recommendationDecisions';
+import { reconcileManualExecutions } from './executionReconciliation';
 
 export interface PostSyncPipelineResult {
   steps: Record<string, { ok: boolean; result?: unknown; error?: string }>;
@@ -26,10 +27,12 @@ export interface PostSyncPipelineResult {
  * itself already succeeded and partial downstream analysis is still more
  * useful than none. Every step's outcome is reported back to the caller.
  *
- * `recommendationDecisions` runs first — it matches the transactions this
- * sync just ingested against still-PENDING recommendations
- * (lib/domain/recommendationDecisions.ts), so downstream jobs and pages see
- * up-to-date decision status.
+ * `recommendationDecisions` and `executionReconciliation` both run first,
+ * before anything else — they match the transactions this sync just
+ * ingested against, respectively, still-PENDING recommendations
+ * (lib/domain/recommendationDecisions.ts) and still-PENDING manually-
+ * recorded executions (lib/domain/executionReconciliation.ts), so
+ * downstream jobs and pages see up-to-date decision/reconciliation status.
  */
 export async function runPostSyncPipeline(): Promise<PostSyncPipelineResult> {
   const steps: PostSyncPipelineResult['steps'] = {};
@@ -43,6 +46,7 @@ export async function runPostSyncPipeline(): Promise<PostSyncPipelineResult> {
   };
 
   await run('recommendationDecisions', () => detectRecommendationDecisions());
+  await run('executionReconciliation', () => reconcileManualExecutions());
   await run('portfolioRefresh', () => runPortfolioRefreshJob());
   await run('riskAssessment', () => runRiskAssessmentJob());
   await run('thesisReview', () => runThesisJob());

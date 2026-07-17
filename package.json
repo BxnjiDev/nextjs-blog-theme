@@ -12,6 +12,10 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "sync:account": "tsx scripts/syncAccount.ts",
+    "sync:validate": "tsx scripts/validateFirstSync.ts",
+    "robinhood:mcp": "tsx scripts/robinhoodMcpInspect.ts",
+    "providers:check": "tsx scripts/checkProviders.ts",
+    "scheduler": "tsx scripts/scheduler.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -303,3 +303,24 @@ const mockMarketDataProvider = new MockMarketDataProvider();
 export const marketDataProvider: MarketDataProvider = process.env.MARKET_DATA_API_KEY
   ? new FallbackMarketDataProvider(new TwelveDataProvider(process.env.MARKET_DATA_API_KEY), mockMarketDataProvider)
   : mockMarketDataProvider;
+
+/**
+ * Bypasses the Fallback wrapper (and therefore the mock safety net) to make
+ * one real, cheap Twelve Data call and report whether authentication
+ * actually works — used only by the provider-readiness check
+ * (lib/domain/providerReadiness.ts, `npm run providers:check`), never by
+ * normal app code, since the whole point is to surface a real auth failure
+ * instead of silently falling back to mock data the way every other call
+ * site correctly does.
+ */
+export async function checkTwelveDataAuth(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const apiKey = process.env.MARKET_DATA_API_KEY;
+  if (!apiKey) return { ok: false, latencyMs: 0, error: 'MARKET_DATA_API_KEY is not set' };
+  const start = Date.now();
+  try {
+    await new TwelveDataProvider(apiKey).getQuote('AAPL');
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : String(err) };
+  }
+}

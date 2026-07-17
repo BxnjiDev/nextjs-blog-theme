@@ -5,27 +5,22 @@ import ActionBadge from '@/components/ActionBadge';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import FreshnessStrip from '@/components/FreshnessStrip';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
+import { normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { formatPercent } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
-interface ExplainabilityShape {
-  whyNow: string;
-  whyNot: string;
-  supportingEvidence: string;
-  contradictingEvidence: string;
-  keyAssumptions: string;
-  invalidationConditions: string;
-  vsCashAndSpy: string;
-  vsCurrentAllocation: string;
-  baseCase: string;
-  primaryCatalyst: string;
-  biggestUnknown: string;
-  biggestRisk: string;
-  whyConfidenceNotHigher: string;
-  portfolioImpact: string;
-  opportunityCost: string;
-}
+const DATA_QUALITY_STYLES: Record<string, string> = {
+  PASS: 'bg-risk-low/10 text-risk-low',
+  PASS_WITH_WARNINGS: 'bg-risk-medium/10 text-risk-medium',
+  BLOCKED: 'bg-risk-high/10 text-risk-high',
+};
+
+const CHECK_STATUS_STYLES: Record<string, string> = {
+  ok: 'text-risk-low',
+  warning: 'text-risk-medium',
+  blocking: 'text-risk-high',
+};
 
 interface CalibrationBucket {
   label: string;
@@ -55,7 +50,8 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
     getDataFreshnessSnapshot(),
   ]);
 
-  const explainability = recommendation.explainability as unknown as ExplainabilityShape | null;
+  const explainability = normalizeExplainability(recommendation.explainability);
+  const dataQualityChecks = normalizeDataQualityChecks(recommendation.dataQualityChecks);
   const conviction = recommendation.holding.thesis?.convictionAssessments[0] ?? null;
   const buckets = latestCalibration ? (latestCalibration.buckets as unknown as CalibrationBucket[]) : [];
   const bucket = findCalibrationBucket(buckets, recommendation.confidenceScore);
@@ -81,6 +77,27 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
       </div>
 
       <FreshnessStrip sources={freshness} />
+
+      {recommendation.dataQualityStatus && (
+        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="mb-2 flex items-center gap-2">
+            <p className="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Data quality gate</p>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${DATA_QUALITY_STYLES[recommendation.dataQualityStatus]}`}>
+              {recommendation.dataQualityStatus.replace(/_/g, ' ')}
+            </span>
+          </div>
+          {dataQualityChecks.length > 0 && (
+            <ul className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+              {dataQualityChecks.map((c) => (
+                <li key={c.name} className="flex gap-2">
+                  <span className={`font-medium ${CHECK_STATUS_STYLES[c.status]}`}>{c.name.replace(/_/g, ' ')}:</span>
+                  <span className="text-gray-600 dark:text-gray-400">{c.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">

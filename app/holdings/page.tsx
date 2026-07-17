@@ -1,18 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import ActionBadge from '@/components/ActionBadge';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
+import { normalizeExplainability } from '@/lib/domain/legacyNormalization';
 
 export const dynamic = 'force-dynamic';
-
-interface ExplainabilityShape {
-  whyNow: string;
-  whyNot: string;
-  supportingEvidence: string;
-  contradictingEvidence: string;
-  keyAssumptions: string;
-  invalidationConditions: string;
-  vsCashAndSpy: string;
-}
 
 export default async function HoldingsPage() {
   const holdings = await prisma.holding.findMany({
@@ -119,7 +110,7 @@ export default async function HoldingsPage() {
                     <div className="md:col-span-2 rounded border border-gray-100 p-3 dark:border-gray-800">
                       <h3 className="font-medium text-gray-700 dark:text-gray-300">Explainability</h3>
                       {(() => {
-                        const e = rec.explainability as unknown as ExplainabilityShape;
+                        const e = normalizeExplainability(rec.explainability)!;
                         return (
                           <div className="mt-2 grid gap-2 sm:grid-cols-2">
                             <p><span className="font-medium">Why now:</span> {e.whyNow}</p>

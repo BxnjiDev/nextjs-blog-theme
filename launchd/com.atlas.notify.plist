@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.atlas.notify</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/ABSOLUTE/PATH/TO/nextjs-blog-theme/node_modules/.bin/tsx</string>
+    <string>scripts/scheduler.ts</string>
+    <string>run</string>
+    <string>alertDelivery</string>
+    <string>--scheduled</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/nextjs-blog-theme</string>
+
+  <!-- Every 15 minutes, matching the alert-delivery cadence vercel.json used. -->
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/nextjs-blog-theme/logs/scheduler-notify.log</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/nextjs-blog-theme/logs/scheduler-notify.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

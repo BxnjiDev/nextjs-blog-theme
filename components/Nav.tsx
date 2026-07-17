@@ -11,6 +11,7 @@ const links = [
   { href: '/health', label: 'Health' },
   { href: '/performance', label: 'Performance' },
   { href: '/recommendations', label: 'Recommendations' },
+  { href: '/executions', label: 'Executions' },
   { href: '/timeline', label: 'Timeline' },
   { href: '/scorecard', label: 'Scorecard' },
   { href: '/briefing', label: 'Daily Briefing' },

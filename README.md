@@ -113,6 +113,14 @@ API route (see ARCHITECTURE.md for details), scheduled via `vercel.json`:
 Set `CRON_SECRET` for these routes to work at all — they return 503 if it's
 unset, and 401 if the request's bearer token doesn't match.
 
+## Operations (Phase 3.7)
+
+For the exact step-by-step MacBook workflow — connecting the Robinhood MCP
+connector, syncing a real evaluation account, reviewing the first-sync
+validation report, running the scheduler, recording manual trades, and
+diagnosing failed providers/jobs — see
+[docs/OPERATIONS.md](./docs/OPERATIONS.md).
+
 ## Environment variables
 
 All integration keys are optional — the app degrades to mock/heuristic

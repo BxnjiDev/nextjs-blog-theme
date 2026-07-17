@@ -86,3 +86,23 @@ class EdgarSecFilingsProvider implements SecFilingsProvider {
 }
 
 export const secFilingsProvider: SecFilingsProvider = new EdgarSecFilingsProvider();
+
+/** SEC EDGAR needs no API key, so "readiness" is reachability rather than
+ * authentication — a live, lightweight ping against the same public
+ * endpoint getRecentFilings ultimately hits. Shared by /connections and
+ * `npm run providers:check` so there's one implementation, not two ad hoc
+ * copies. */
+export async function checkSecEdgarReachability(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const start = Date.now();
+  try {
+    const res = await fetch('https://www.sec.gov/files/company_tickers.json', {
+      headers: {
+        'User-Agent': process.env.SEC_EDGAR_USER_AGENT || 'Atlas Portfolio Agent (set SEC_EDGAR_USER_AGENT)',
+      },
+      cache: 'no-store',
+    });
+    return res.ok ? { ok: true, latencyMs: Date.now() - start } : { ok: false, latencyMs: Date.now() - start, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : String(err) };
+  }
+}
