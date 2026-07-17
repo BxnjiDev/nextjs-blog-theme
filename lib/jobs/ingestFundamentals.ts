@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { fundamentalsProvider } from '@/lib/integrations';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 /** Valuation moves with price so it's refreshed often; ownership/shares data
  * changes far less frequently (roughly quarterly in reality), so it's
@@ -37,7 +38,8 @@ export async function runFundamentalsIngestJob(options?: { force?: boolean }): P
     errors: [],
   };
 
-  const account = await prisma.account.findFirst({ include: { holdings: true }, orderBy: { createdAt: 'asc' } });
+  const accountId = await getActiveAccountId();
+  const account = accountId ? await prisma.account.findUnique({ where: { id: accountId }, include: { holdings: true } }) : null;
   if (!account) return result;
 
   for (const holding of account.holdings) {

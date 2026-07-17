@@ -21,7 +21,7 @@ time — rather than regenerating a fresh take from scratch every day. It is
 ## Data flow
 
 ```
-Robinhood Agentic Trading (MCP)  --agent reports-->  lib/integrations/robinhood.ts  -->  Postgres (Account, Holding, Transaction)
+Robinhood Agentic Trading (MCP)  --agent reads-->  lib/domain/accountSync.ts (via CLI or /api/sync/account)  -->  Postgres (Account, Holding, Transaction, OpenOrder, SyncLog)
 Market data provider (Twelve Data) -->  lib/integrations/marketData.ts             -->  quotes/technicals/fundamentals/history
 News provider (Finnhub)            -->  lib/integrations/news.ts                     -->  scored NewsArticle -> monitorNews.ts -> NewsItem (stored, deduped)
 Fundamentals provider (Financial Modeling Prep) -> lib/integrations/fundamentals.ts --> statements/ratios/ownership/earnings calendar
@@ -65,9 +65,10 @@ An AI agent session connects to that MCP server directly to read the agentic
 account and place orders; Robinhood previews every order with the account
 owner before it executes. Atlas's Next.js app never holds brokerage
 credentials. Its job is to persist what the connected agent reports:
-`lib/integrations/robinhood.ts` exposes `syncFromAgent()` (holdings/cash/
-buying-power) and `recordExecution()` (marks a `TradeProposal` executed once
-the agent's MCP session confirms a fill).
+account/holding/transaction/open-order state goes through
+`lib/domain/accountSync.ts` (see "Live-evaluation account sync" below), and
+`lib/integrations/robinhood.ts` exposes `recordExecution()` (marks a
+`TradeProposal` executed once the agent's MCP session confirms a fill).
 
 ### What's real vs. mocked right now
 
@@ -80,7 +81,7 @@ the agent's MCP session confirms a fill).
 | AI reasoning (thesis narrative, daily recommendation, retrospective critique) | **Real** — Claude (structured output, model via `ANTHROPIC_MODEL`, default `claude-opus-4-8`) when `ANTHROPIC_API_KEY` is set, `aiReasoning.ts`. Falls back to a deterministic, clearly-labeled data summary (no fabricated thesis) when unset or on failure. |
 | Conviction / risk / portfolio health / thesis-accuracy / scorecard scores | **Real, deterministic** — plain TypeScript arithmetic over fetched data (`lib/domain/{risk,conviction,portfolioHealth}.ts`, `lib/jobs/{computeThesisAccuracy,computeScorecard,computeConfidenceCalibration,detectPatterns}.ts`). Claude is never asked for these numbers. |
 | Alert delivery | **Real** — SMTP (any provider) via `nodemailer`, and a plain HTTP webhook, `lib/integrations/notifications.ts`. No-ops (alerts still generated and stored) when no channel is configured. |
-| Robinhood account/holdings | **Mock seed data** until an agent session syncs a real account |
+| Robinhood account/holdings | **Mock seed data**, or a **real synced account** once `npm run sync:account` / `POST /api/sync/account` has run — see "Live-evaluation account sync" below. A synced evaluation account always takes over as "the" active account (`getActiveAccountId()`). |
 
 Swap an implementation by editing the single file behind each interface in
 `lib/integrations/`; nothing else needs to change because pages and jobs only
@@ -403,17 +404,125 @@ complete recommendation history with performance attribution per row.
 
 Every `Recommendation` carries an `explainability` JSON blob
 (`ExplainabilitySchema` in `lib/integrations/aiReasoning.ts`) answering: why
-now, why not (a genuine steelman of the opposite call, not a restatement),
-supporting evidence, contradicting evidence (or an explicit "none found"),
-key assumptions, and what would invalidate the call — plus a stated
+now, why not (a genuine steelman of the opposite call, not a restatement —
+in an evaluation-account context this doubles as "the argument for
+waiting"), supporting evidence, contradicting evidence (or an explicit
+"none found"), key assumptions, what would invalidate the call, and how the
+call compares to the two do-nothing alternatives (`vsCashAndSpy`: holding
+cash, or buying SPY with the same dollars) — plus a stated
 `expectedOutcome`/`expectedTimeHorizon` that the learning engine later
-grades against. Rendered on `/holdings` and `/intelligence/{symbol}`. The
-underlying separation is structural, not just cosmetic: verified facts
-(quote/fundamentals/filings/news, tagged with `quality`), deterministic
-calculations (conviction/risk/health scores, tagged in `methodology`), AI
-interpretation (thesis text, explainability fields), and unknowns (anything
-explicitly marked unavailable) are never merged into one undifferentiated
-blob anywhere in this schema.
+grades against, and deterministic `proposedDollarAmount`/
+`percentageOfPortfolio` position sizing (`lib/domain/positionSizing.ts`,
+code-computed from stated confidence and the account's actual cash/total
+value — never an AI-invented figure). Rendered on `/holdings` and
+`/intelligence/{symbol}`. The underlying separation is structural, not just
+cosmetic: verified facts (quote/fundamentals/filings/news, tagged with
+`quality`), deterministic calculations (conviction/risk/health/position-
+sizing scores, tagged in `methodology`), AI interpretation (thesis text,
+explainability fields), and unknowns (anything explicitly marked
+unavailable) are never merged into one undifferentiated blob anywhere in
+this schema.
+
+## Live-evaluation account sync (Phase 3.5)
+
+Atlas can be pointed at a real, small ($500 max) Robinhood account for
+recommendation-only testing — the user places or closes every position
+manually; Atlas never submits an order. The `EvaluationBanner`
+(`components/EvaluationBanner.tsx`, rendered site-wide from `app/layout.tsx`
+whenever an `Account.isEvaluationAccount` row exists) makes this visible on
+every page.
+
+### How account data reaches Atlas
+
+An agent session with the Robinhood Agentic Trading MCP connector active
+(see "Why Robinhood isn't a REST client here", above) reads real account
+state directly from Robinhood and reports it to Atlas as one JSON payload —
+this app never calls Robinhood itself, and never stores Robinhood
+credentials, session tokens, or MCP authorization secrets anywhere. The
+payload contract (`lib/domain/accountSyncSchema.ts`, zod, versioned via
+`ACCOUNT_SYNC_SCHEMA_VERSION`) covers account balance, cash, buying power,
+holdings (quantity, avg cost, market value, realized/unrealized P&L),
+transactions, and open orders. Two entry points share one implementation
+(`lib/domain/accountSync.ts` — neither has sync logic of its own):
+
+- **CLI** (`npm run sync:account -- <file>` or `--stdin`,
+  `scripts/syncAccount.ts`) — talks to Postgres directly via `DATABASE_URL`,
+  no running server or secret required. This is the primary path for local
+  use.
+- **API** (`POST /api/sync/account`) — for a deployed/running Atlas
+  instance, guarded by `SYNC_SECRET` (same fail-closed pattern as
+  `CRON_SECRET`, a distinct secret since it's a different trust boundary).
+
+### Validation and rejection
+
+`AccountSyncPayloadSchema.safeParse` rejects malformed/incomplete payloads
+with a clear per-field error list. Beyond schema shape, `syncAccount()`
+rejects (writes nothing but an audit `SyncLog` row) on: an unsupported
+`schemaVersion`; a stale `asOf` (older than `SYNC_STALE_MINUTES`, default
+60); and internal duplicates (repeated holding symbols, transaction
+`externalId`s, or order `externalId`s within one payload). "Equities only"
+and "no shorting" are enforced structurally — `assetClass` can only be
+`EQUITY`/`ETF` and `quantity`/`price` reject negative numbers, so an
+options/crypto/short position simply cannot pass validation. Margin
+(`buyingPower` meaningfully exceeding cash) and exceeding the configured
+$500 cap by cost basis (`lib/domain/evaluationConfig.ts`) are **warnings**,
+not rejections — Atlas can't control the user's brokerage settings, and
+refusing to sync over it would make the account impossible to keep current.
+
+### Idempotency
+
+Holdings are upserted by `(accountId, symbol)`; transactions are
+create-and-catch-P2002 by unique `externalId` (the actual idempotency
+mechanism — a repeated payload increments `recordsSkipped`, never
+duplicates); open orders upsert by `(accountId, externalId)`. A symbol
+previously known but absent from a new payload is treated as fully closed
+(quantity zeroed, never deleted, so thesis/recommendation history for it
+survives).
+
+### Reconciliation
+
+Every check compares Robinhood's reported numbers against something Atlas
+can independently derive — never against itself:
+
+| Disagreement | Compared against |
+| --- | --- |
+| Cash | Prior stored cash + the cash flow implied by this payload's transactions since the last sync |
+| Quantity | Prior stored quantity + the share-count delta implied by this payload's transactions |
+| Cost basis | Prior stored cost basis, when no transaction for that symbol appears in this payload |
+| Market value | Atlas's own live quote (`marketDataProvider.getQuote`) × quantity |
+| Transaction history | All transactions ever stored for that symbol, reconstructed into a running quantity |
+
+Mismatches beyond a tolerance become warnings on the sync result and in the
+`SyncLog` row — visible on `/connections` — never a silent overwrite.
+
+### Post-sync pipeline
+
+A successful sync runs the same six jobs already documented above
+(`lib/domain/accountSyncPipeline.ts`): portfolio refresh → risk assessment
+→ thesis review → recommendation generation → portfolio health → daily
+briefing, in that dependency order (health needs the fresh risk score and
+thesis conviction, so it can't run before them; briefing reads everything,
+so it runs last). Best-effort — one step failing doesn't stop the others,
+and every step's outcome is reported back to the caller.
+
+### Multi-account resolution
+
+Every job in this app was built assuming exactly one `Account` row exists —
+true as long as only the seed script ever created one. Syncing a real
+account creates a **second** row, which surfaced a real latent bug during
+Phase 3.5 testing: jobs that did `prisma.account.findFirst({orderBy:
+{createdAt: 'asc'}})` kept resolving to the old seed account instead of the
+newly-synced real one. `lib/domain/portfolio.ts`'s `getActiveAccountId()` is
+now the single place this resolution happens — an `isEvaluationAccount`
+account always wins over anything else — and every job that used to run its
+own `findFirst` (refresh via `getPortfolioOverview`, risk, health, thesis,
+recommendations, briefing, fundamentals/earnings ingestion, opportunity
+comparisons, outcome tracking) now goes through it. The Phase 3B
+continuous-learning aggregates (confidence calibration, thesis accuracy,
+scorecard, pattern detection) do **not** yet filter by account — they have
+no `accountId` column at all — so with more than one account on record
+their numbers blend across accounts; this is a known, documented gap, not
+silently swept aside (see "What's not built yet").
 
 ## The trade approval gate
 
@@ -530,6 +639,16 @@ alert type at all, deliberately.
 - Additional notification channels (Slack, Discord, SMS, mobile push) — the
   registry in `lib/integrations/notifications.ts` supports adding these
   without touching the alert engine, but only EMAIL/WEBHOOK are implemented.
+- Per-account scoping for the Phase 3B continuous-learning aggregates
+  (`ConfidenceCalibration`, `ThesisAccuracyScore`, `RecommendationScorecard`,
+  `RecommendationPattern`) — none of these models have an `accountId`
+  column, so with more than one `Account` row on record (e.g. the seed
+  account plus a synced evaluation account) their numbers blend across all
+  of them. `getActiveAccountId()` scopes every other job correctly; adding
+  `accountId` to these four models is the follow-up.
+- Automatic order placement of any kind, for the evaluation account or any
+  other — `OpenOrder` is a read-only mirror of what Robinhood reports, and
+  `TradeProposal.mode` stays `MANUAL_APPROVAL` throughout.
 - The autonomous-trading mode itself (see above).
 
 ## Local development
@@ -548,3 +667,12 @@ To exercise a job locally, set `CRON_SECRET` in `.env` and call it directly:
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/jobs/refresh
 ```
+
+To sync a real (or test) account snapshot without running the server at all:
+
+```bash
+npm run sync:account -- ./account-snapshot.json
+```
+
+See "Live-evaluation account sync" above for the payload shape and the full
+workflow this is meant to support.

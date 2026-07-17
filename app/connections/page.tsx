@@ -59,6 +59,7 @@ export default async function ConnectionsPage() {
   const hasCronSecret = Boolean(process.env.CRON_SECRET);
   const hasEmailChannel = Boolean(process.env.SMTP_HOST && process.env.ALERT_EMAIL_TO);
   const hasWebhookChannel = Boolean(process.env.ALERT_WEBHOOK_URL);
+  const hasSyncSecret = Boolean(process.env.SYNC_SECRET);
 
   const [
     db,
@@ -77,6 +78,8 @@ export default async function ConnectionsPage() {
     latestEarningsEvent,
     latestAlertDelivery,
     latestScorecard,
+    evaluationAccount,
+    recentSyncLogs,
   ] = await Promise.all([
     checkDb(),
     checkEdgarReachable(),
@@ -94,6 +97,8 @@ export default async function ConnectionsPage() {
     prisma.earningsEvent.findFirst({ orderBy: { updatedAt: 'desc' } }),
     prisma.alertDelivery.findFirst({ orderBy: { createdAt: 'desc' } }),
     prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.account.findFirst({ where: { isEvaluationAccount: true } }),
+    prisma.syncLog.findMany({ orderBy: { syncedAt: 'desc' }, take: 10 }),
   ]);
 
   return (
@@ -189,11 +194,56 @@ export default async function ConnectionsPage() {
         )}
       </section>
 
+      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+        <h2 className="mb-3 font-medium">Live-evaluation account sync</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <HealthRow label="Evaluation account connected" ok={Boolean(evaluationAccount)} detail={evaluationAccount ? evaluationAccount.externalId : 'Never synced'} />
+          <HealthRow
+            label="Last sync"
+            ok={Boolean(recentSyncLogs[0]?.success)}
+            detail={recentSyncLogs[0] ? `${recentSyncLogs[0].success ? 'ok' : 'failed'} · ${recentSyncLogs[0].source} · ${recentSyncLogs[0].syncedAt.toLocaleString()}` : 'Never run'}
+          />
+        </div>
+        {!hasSyncSecret && (
+          <p className="mt-3 text-xs text-risk-medium">
+            SYNC_SECRET is not set — the /api/sync/account route will refuse every request until it&rsquo;s
+            configured. The CLI (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run sync:account</code>) doesn&rsquo;t need it, since it
+            writes to the database directly rather than over HTTP.
+          </p>
+        )}
+        {recentSyncLogs.length > 0 && (
+          <div className="mt-3">
+            <h3 className="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Recent sync log</h3>
+            <ul className="space-y-2 text-xs">
+              {recentSyncLogs.map((log) => (
+                <li key={log.id} className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <span className={log.success ? 'text-risk-low' : 'text-risk-high'}>{log.success ? 'Success' : 'Rejected'}</span>
+                    <span className="text-gray-500 dark:text-gray-400">
+                      {log.syncedAt.toLocaleString()} · {log.source} · v{log.schemaVersion}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-gray-600 dark:text-gray-400">
+                    +{log.recordsAdded} added, {log.recordsUpdated} updated, {log.recordsSkipped} skipped
+                  </p>
+                  {Array.isArray(log.errors) && log.errors.length > 0 && (
+                    <p className="mt-1 text-risk-high">{(log.errors as string[]).join(' · ')}</p>
+                  )}
+                  {Array.isArray(log.warnings) && log.warnings.length > 0 && (
+                    <p className="mt-1 text-risk-medium">{(log.warnings as string[]).join(' · ')}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
       <div className="space-y-4">
         <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <h2 className="font-medium">Robinhood Agentic Trading (brokerage + execution)</h2>
-            <StatusPill ok={false} label="Not connected in this app" />
+            <StatusPill ok={Boolean(evaluationAccount)} label={evaluationAccount ? 'Evaluation account synced' : 'Not connected in this app'} />
           </div>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             This is an MCP connector, not an API key stored by this app. Connect it to the agent
@@ -203,10 +253,12 @@ export default async function ConnectionsPage() {
             claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading
           </pre>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Once connected, the agent can read the account and preview/place orders; this
-            app&rsquo;s role is to persist what the agent reports via{' '}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/robinhood.ts</code>.
-            All order placement stays MANUAL_APPROVAL until explicitly changed per account.
+            Once connected, the agent can read the account (holdings, cash, transactions, open orders)
+            and report it to Atlas via <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run sync:account</code> (local
+            CLI) or <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">POST /api/sync/account</code> — see{' '}
+            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/accountSync.ts</code>. Atlas never holds
+            Robinhood credentials, session tokens, or MCP secrets, and never submits an order — every
+            trade is placed manually. See the banner at the top of every page.
           </p>
         </div>
 

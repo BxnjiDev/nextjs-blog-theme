@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { fundamentalsProvider } from '@/lib/integrations';
 import { createAlertIfNew, todayKey } from '@/lib/domain/alerts';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 const SURPRISE_ALERT_THRESHOLD_PCT = 10;
 const UPCOMING_WINDOW_DAYS = 7;
@@ -38,7 +39,8 @@ export async function runEarningsIngestJob(): Promise<EarningsIngestResult> {
     errors: [],
   };
 
-  const account = await prisma.account.findFirst({ include: { holdings: true }, orderBy: { createdAt: 'asc' } });
+  const accountId = await getActiveAccountId();
+  const account = accountId ? await prisma.account.findUnique({ where: { id: accountId }, include: { holdings: true } }) : null;
   if (!account) return result;
 
   const day = todayKey();

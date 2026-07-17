@@ -17,3 +17,20 @@ export function assertCronAuthorized(req: NextRequest): NextResponse | null {
   }
   return null;
 }
+
+/**
+ * Guards /api/sync/account — a distinct trust boundary from the cron
+ * routes (this one is triggered by an agent/user submitting real account
+ * data, not Vercel Cron), so it uses its own secret rather than
+ * CRON_SECRET. Same fail-closed shape: refuses to run at all if unset.
+ */
+export function assertSyncAuthorized(req: NextRequest): NextResponse | null {
+  const secret = process.env.SYNC_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: 'SYNC_SECRET is not configured on the server.' }, { status: 503 });
+  }
+  if (req.headers.get('authorization') !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return null;
+}

@@ -31,14 +31,39 @@ export interface PortfolioOverview {
 }
 
 /**
- * Computes the portfolio overview from the account currently on record plus
- * live-ish quotes from the market data provider. Returns null if no account
- * has been synced yet (i.e. nothing to show besides an empty state).
+ * Resolves which Account every job and page treats as "the" portfolio.
+ * Atlas is architecturally single-account (all jobs pull "the" account, not
+ * a list) — this is the one place that decision is made, so it's made
+ * consistently everywhere. A synced evaluation account (isEvaluationAccount,
+ * see lib/domain/accountSync.ts) always wins over anything else, including
+ * older seed/demo accounts: once a real Robinhood account has been synced,
+ * every job should be analyzing that account, not leftover seed data. Falls
+ * back to the oldest account on record when no evaluation account exists,
+ * preserving pre-Phase-3.5 behavior.
+ */
+export async function getActiveAccountId(): Promise<string | null> {
+  const evaluationAccount = await prisma.account.findFirst({
+    where: { isEvaluationAccount: true },
+    orderBy: { lastSyncedAt: 'desc' },
+  });
+  if (evaluationAccount) return evaluationAccount.id;
+
+  const fallback = await prisma.account.findFirst({ orderBy: { createdAt: 'asc' } });
+  return fallback?.id ?? null;
+}
+
+/**
+ * Computes the portfolio overview from the active account plus live-ish
+ * quotes from the market data provider. Returns null if no account has
+ * been synced yet (i.e. nothing to show besides an empty state).
  */
 export async function getPortfolioOverview(): Promise<PortfolioOverview | null> {
-  const account = await prisma.account.findFirst({
+  const accountId = await getActiveAccountId();
+  if (!accountId) return null;
+
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
     include: { holdings: true },
-    orderBy: { createdAt: 'asc' },
   });
   if (!account) return null;
 

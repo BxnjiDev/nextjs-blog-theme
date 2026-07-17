@@ -11,6 +11,7 @@ interface ExplainabilityShape {
   contradictingEvidence: string;
   keyAssumptions: string;
   invalidationConditions: string;
+  vsCashAndSpy: string;
 }
 
 export default async function HoldingsPage() {
@@ -105,6 +106,15 @@ export default async function HoldingsPage() {
                       {rec.expectedOutcome} (horizon: {rec.expectedTimeHorizon})
                     </p>
                   </div>
+                  {rec.proposedDollarAmount !== null && (
+                    <div className="md:col-span-2 rounded border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                      <h3 className="font-medium text-gray-700 dark:text-gray-300">Evaluation sizing (manual execution only)</h3>
+                      <p className="mt-1 text-gray-600 dark:text-gray-400">
+                        Proposed ${Number(rec.proposedDollarAmount).toFixed(0)} ({rec.percentageOfPortfolio?.toFixed(1) ?? '0.0'}% of the
+                        experimental portfolio). Atlas does not place this order — size and execute it yourself if you agree.
+                      </p>
+                    </div>
+                  )}
                   {rec.explainability && (
                     <div className="md:col-span-2 rounded border border-gray-100 p-3 dark:border-gray-800">
                       <h3 className="font-medium text-gray-700 dark:text-gray-300">Explainability</h3>
@@ -113,11 +123,12 @@ export default async function HoldingsPage() {
                         return (
                           <div className="mt-2 grid gap-2 sm:grid-cols-2">
                             <p><span className="font-medium">Why now:</span> {e.whyNow}</p>
-                            <p><span className="font-medium">Why not:</span> {e.whyNot}</p>
+                            <p><span className="font-medium">Argument for waiting:</span> {e.whyNot}</p>
                             <p><span className="font-medium">Supporting:</span> {e.supportingEvidence}</p>
                             <p><span className="font-medium">Contradicting:</span> {e.contradictingEvidence}</p>
                             <p><span className="font-medium">Assumptions:</span> {e.keyAssumptions}</p>
                             <p><span className="font-medium">Would invalidate:</span> {e.invalidationConditions}</p>
+                            <p className="sm:col-span-2"><span className="font-medium">Vs. cash / SPY:</span> {e.vsCashAndSpy}</p>
                           </div>
                         );
                       })()}

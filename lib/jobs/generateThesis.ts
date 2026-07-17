@@ -6,6 +6,7 @@ import { computeConviction, type ConvictionResult } from '@/lib/domain/convictio
 import { getFundamentalHistory } from '@/lib/domain/fundamentalsHistory';
 import { buildMemoryContext } from '@/lib/domain/memory';
 import { createAlertIfNew } from '@/lib/domain/alerts';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 /** Idempotency window, same pattern as the recommendation job. */
 const THESIS_REFRESH_HOURS = 20;
@@ -58,9 +59,11 @@ function deterministicChangeDescription(
 export async function runThesisJob(options?: { force?: boolean }): Promise<ThesisJobResult> {
   const result: ThesisJobResult = { processed: 0, skipped: 0, changed: 0, errors: [] };
 
-  const account = await prisma.account.findFirst({
+  const accountId = await getActiveAccountId();
+  if (!accountId) return result;
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
     include: { holdings: { include: { thesis: true } } },
-    orderBy: { createdAt: 'asc' },
   });
   if (!account) return result;
 

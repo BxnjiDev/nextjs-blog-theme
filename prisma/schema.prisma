@@ -151,18 +151,25 @@ enum TradeProposalStatus {
 /// A connected brokerage account (e.g. a Robinhood Agentic Trading account).
 /// Populated by syncing from the brokerage integration, not hand-edited.
 model Account {
-  id           String    @id @default(cuid())
-  provider     String // e.g. "robinhood"
-  externalId   String    @unique // brokerage account id
-  cashBalance  Decimal   @default(0)
-  buyingPower  Decimal   @default(0)
-  lastSyncedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  provider            String // e.g. "robinhood"
+  externalId          String    @unique // brokerage account id
+  cashBalance         Decimal   @default(0)
+  buyingPower         Decimal   @default(0)
+  lastSyncedAt        DateTime?
+  /// Set by lib/domain/accountSync.ts when a sync payload identifies this
+  /// as the $500 recommendation-only evaluation account (see
+  /// lib/domain/evaluationConfig.ts). Drives the site-wide evaluation-mode
+  /// banner — nothing else in the app branches on this flag.
+  isEvaluationAccount Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   holdings       Holding[]
   transactions   Transaction[]
   tradeProposals TradeProposal[]
+  openOrders     OpenOrder[]
+  syncLogs       SyncLog[]
 }
 
 /// A current position, mirrored from the brokerage account.
@@ -176,6 +183,11 @@ model Holding {
   sector       String?
   quantity     Decimal
   avgCostBasis Decimal
+  /// Cumulative realized P&L as reported by the brokerage sync payload —
+  /// Atlas has no independent way to compute this (it doesn't necessarily
+  /// have full pre-Atlas transaction history), so it's taken as reported,
+  /// not derived.
+  realizedPnl  Decimal    @default(0)
   updatedAt    DateTime   @updatedAt
 
   recommendations Recommendation[]
@@ -251,9 +263,15 @@ model Recommendation {
   expectedOutcome        String                 @default("Not stated.")
   expectedTimeHorizon    String                 @default("Not stated.")
   /// Explainability: why now / why not / supporting & contradicting
-  /// evidence / key assumptions / what would invalidate this call — see
+  /// evidence / key assumptions / what would invalidate this call / how
+  /// this compares to just holding cash or buying SPY — see
   /// lib/integrations/aiReasoning.ts's ExplainabilitySchema.
   explainability         Json?
+  /// Deterministic position sizing (code-computed from confidence + the
+  /// account's actual cash/total value at generation time — never an
+  /// AI-invented number). Null for WATCH, where no size applies.
+  proposedDollarAmount   Decimal?
+  percentageOfPortfolio  Float?
   /// Per-source freshness/quality metadata captured at generation time
   /// (quote/fundamentals asOf + quality, filing count, news count) — lets
   /// the dashboard show exactly how current an analysis is.
@@ -839,4 +857,56 @@ model RecommendationPattern {
   generatedAt       DateTime          @default(now())
 
   @@index([generatedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3.5: live-evaluation sync. An agent session with the Robinhood
+// Agentic Trading MCP connector active reads real account state and reports
+// it to lib/domain/accountSync.ts (via the CLI or the /api/sync/account
+// route) — this app never holds brokerage credentials, MCP tokens, or
+// session secrets; see lib/integrations/robinhood.ts and ARCHITECTURE.md.
+// ---------------------------------------------------------------------------
+
+/// A brokerage-reported open (unfilled) order — mirror-only, never written
+/// to by this app. Upserted by (accountId, externalId); Atlas has no
+/// execution visibility beyond what a sync payload reports, so a stale row
+/// isn't auto-closed — its `status` reflects what was last reported.
+model OpenOrder {
+  id          String    @id @default(cuid())
+  accountId   String
+  account     Account   @relation(fields: [accountId], references: [id])
+  externalId  String // brokerage order id
+  symbol      String
+  side        TradeSide
+  quantity    Decimal
+  orderType   OrderType
+  limitPrice  Decimal?
+  stopPrice   Decimal?
+  status      String // brokerage's own vocabulary (e.g. "open", "partially_filled") — not normalized into an enum
+  submittedAt DateTime
+  lastSeenAt  DateTime  @updatedAt
+
+  @@unique([accountId, externalId])
+  @@index([symbol])
+}
+
+/// Audit log for every account-sync attempt, successful or not — the
+/// permanent record of "what synced, from where, when, and what happened."
+model SyncLog {
+  id             String    @id @default(cuid())
+  accountId      String?
+  account        Account?  @relation(fields: [accountId], references: [id])
+  source         String // e.g. "cli", "api"
+  schemaVersion  String
+  payloadAsOf    DateTime?
+  success        Boolean
+  recordsAdded   Int       @default(0)
+  recordsUpdated Int       @default(0)
+  recordsSkipped Int       @default(0)
+  errors         Json      @default("[]")
+  warnings       Json      @default("[]")
+  syncedAt       DateTime  @default(now())
+
+  @@index([syncedAt])
+  @@index([accountId, syncedAt])
 }

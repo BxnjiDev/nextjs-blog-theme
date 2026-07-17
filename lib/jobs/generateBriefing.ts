@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getPortfolioOverview } from '@/lib/domain/portfolio';
+import { getPortfolioOverview, getActiveAccountId } from '@/lib/domain/portfolio';
 import { getPerformanceSummary } from '@/lib/domain/performance';
 import { todayUtcDateOnly } from '@/lib/domain/date';
 import { secFilingsProvider } from '@/lib/integrations';
@@ -41,14 +41,17 @@ export interface BriefingJobResult {
  * for today instead of creating duplicates.
  */
 export async function runBriefingJob(): Promise<BriefingJobResult> {
-  const account = await prisma.account.findFirst({
-    include: {
-      holdings: {
-        include: { recommendations: { orderBy: { generatedAt: 'desc' }, take: 1 } },
-      },
-    },
-    orderBy: { createdAt: 'asc' },
-  });
+  const accountId = await getActiveAccountId();
+  const account = accountId
+    ? await prisma.account.findUnique({
+        where: { id: accountId },
+        include: {
+          holdings: {
+            include: { recommendations: { orderBy: { generatedAt: 'desc' }, take: 1 } },
+          },
+        },
+      })
+    : null;
 
   if (!account) {
     return { created: false, reason: 'No account connected yet.' };

@@ -6,11 +6,16 @@ import { resolveAnthropicModel, type SupportedAnthropicModel } from './anthropic
 
 const ExplainabilitySchema = z.object({
   whyNow: z.string().describe('Why this action, at this time — grounded in the data given.'),
-  whyNot: z.string().describe('The strongest reason NOT to take this action — steelman the alternative.'),
+  whyNot: z.string().describe('The strongest reason NOT to take this action — steelman the alternative. In an evaluation-account context, this doubles as "the argument for waiting."'),
   supportingEvidence: z.string().describe('The specific data points that support this call.'),
   contradictingEvidence: z.string().describe('The specific data points that cut against this call, if any. Say "None found in the available data" if genuinely none.'),
   keyAssumptions: z.string().describe('What has to remain true for this call to hold up.'),
   invalidationConditions: z.string().describe('What specific, observable event would invalidate this call.'),
+  vsCashAndSpy: z
+    .string()
+    .describe(
+      'How this call compares to the two do-nothing alternatives: holding cash, or simply buying SPY with the same dollars. Ground this in the SPY/cash data provided — do not invent a return figure for the recommended action itself.'
+    ),
 });
 
 const HoldingAnalysisSchema = z.object({
@@ -58,6 +63,16 @@ export interface HoldingAnalysisInput {
   /** Past recommendations/conviction/alerts for this holding plus the
    * portfolio-wide confidence-calibration summary — see lib/domain/memory.ts. */
   memoryContext: string;
+  /** Deterministic grounding for explainability.vsCashAndSpy — real numbers
+   * the model compares against, never invents. */
+  portfolioContext: {
+    cashBalance: number;
+    totalPortfolioValue: number;
+    /** SPY's own realized return/volatility over the same ~60-session
+     * lookback used elsewhere in the app (lib/domain/risk.ts helpers). */
+    spyRecentReturnPct: number | null;
+    spyAnnualizedVolatilityPct: number | null;
+  };
 }
 
 const ThesisNarrativeSchema = z.object({
@@ -163,6 +178,7 @@ Rules you must follow:
 - State an expectedOutcome and expectedTimeHorizon as a real, gradeable prediction — not a hedge like "it depends." This will be checked against what actually happens.
 - For explainability: whyNot should genuinely steelman the opposite call, not restate whyNow in different words. contradictingEvidence should name real data points against the call, or explicitly say none were found.
 - If historical confidence-calibration data is provided, use it to calibrate your stated confidenceScore — if a similar confidence band has historically over- or under-performed, adjust accordingly rather than ignoring that track record.
+- For explainability.vsCashAndSpy: use ONLY the SPY return/volatility figures given to you — never state a specific expected return for the recommended action itself beyond what's already in expectedOutcome.
 - Be concise and evidence-driven. No hype.`;
 
 function buildUserPrompt(input: HoldingAnalysisInput): string {
@@ -216,6 +232,14 @@ function buildUserPrompt(input: HoldingAnalysisInput): string {
   }
 
   lines.push(`\nAI memory (past recommendations/alerts for this holding, plus historical confidence calibration):\n${input.memoryContext}`);
+
+  const pc = input.portfolioContext;
+  lines.push(
+    `\nPortfolio context: cash $${pc.cashBalance.toFixed(2)}, total portfolio value $${pc.totalPortfolioValue.toFixed(2)}. ` +
+      `SPY over the recent lookback: ${pc.spyRecentReturnPct !== null ? `${pc.spyRecentReturnPct.toFixed(1)}% return` : 'return unavailable'}, ` +
+      `${pc.spyAnnualizedVolatilityPct !== null ? `${pc.spyAnnualizedVolatilityPct.toFixed(1)}% annualized volatility` : 'volatility unavailable'}. ` +
+      'Use this for explainability.vsCashAndSpy.'
+  );
 
   lines.push('\nProduce a structured analysis per the schema, following the rules above.');
   return lines.join('\n');
@@ -432,6 +456,10 @@ class HeuristicAiReasoningProvider implements AiReasoningProvider {
         contradictingEvidence: 'Not assessed.',
         keyAssumptions: 'Not assessed.',
         invalidationConditions: 'Not assessed.',
+        vsCashAndSpy:
+          input.portfolioContext.spyRecentReturnPct !== null
+            ? `SPY returned ${input.portfolioContext.spyRecentReturnPct.toFixed(1)}% over the recent lookback (${input.portfolioContext.spyAnnualizedVolatilityPct !== null ? `${input.portfolioContext.spyAnnualizedVolatilityPct.toFixed(1)}% annualized volatility` : 'volatility unavailable'}) — no AI reasoning provider configured to compare this holding's outlook against it.`
+            : 'Not assessed — SPY data and AI reasoning provider both unavailable.',
       },
     };
   }

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider } from '@/lib/integrations';
 import { compareOpportunityToHolding } from '@/lib/domain/opportunityComparison';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 export interface OpportunityComparisonJobResult {
   processed: number;
@@ -22,9 +23,12 @@ const REFRESH_HOURS = 24;
 export async function runOpportunityComparisonJob(): Promise<OpportunityComparisonJobResult> {
   const result: OpportunityComparisonJobResult = { processed: 0, skipped: 0, errors: [] };
 
+  const accountId = await getActiveAccountId();
+  if (!accountId) return result;
+
   const [opportunities, holdings, sp500History] = await Promise.all([
     prisma.opportunity.findMany({ where: { dismissedAt: null } }),
-    prisma.holding.findMany(),
+    prisma.holding.findMany({ where: { accountId } }),
     marketDataProvider.getSp500History(60),
   ]);
   if (opportunities.length === 0 || holdings.length === 0) return result;

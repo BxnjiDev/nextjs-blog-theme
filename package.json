@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "sync:account": "tsx scripts/syncAccount.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

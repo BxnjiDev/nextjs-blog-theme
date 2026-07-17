@@ -12,6 +12,7 @@ interface ExplainabilityShape {
   contradictingEvidence: string;
   keyAssumptions: string;
   invalidationConditions: string;
+  vsCashAndSpy: string;
 }
 
 export const dynamic = 'force-dynamic';
@@ -246,16 +247,28 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
             </div>
           )}
 
+          {latestRecommendation && latestRecommendation.proposedDollarAmount !== null && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+              <h2 className="mb-1 font-medium">Evaluation sizing (manual execution only)</h2>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Proposed ${Number(latestRecommendation.proposedDollarAmount).toFixed(0)} (
+                {latestRecommendation.percentageOfPortfolio?.toFixed(1) ?? '0.0'}% of the experimental portfolio). Atlas does not place
+                this order — size and execute it yourself if you agree.
+              </p>
+            </div>
+          )}
+
           {latestRecommendation && explainability && (
             <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
               <h2 className="mb-3 font-medium">Explainability (latest recommendation)</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 <p className="text-sm"><span className="font-medium">Why now:</span> {explainability.whyNow}</p>
-                <p className="text-sm"><span className="font-medium">Why not:</span> {explainability.whyNot}</p>
+                <p className="text-sm"><span className="font-medium">Argument for waiting:</span> {explainability.whyNot}</p>
                 <p className="text-sm"><span className="font-medium">Supporting evidence:</span> {explainability.supportingEvidence}</p>
                 <p className="text-sm"><span className="font-medium">Contradicting evidence:</span> {explainability.contradictingEvidence}</p>
                 <p className="text-sm"><span className="font-medium">Key assumptions:</span> {explainability.keyAssumptions}</p>
                 <p className="text-sm"><span className="font-medium">What would invalidate this:</span> {explainability.invalidationConditions}</p>
+                <p className="text-sm md:col-span-2"><span className="font-medium">Vs. holding cash / buying SPY:</span> {explainability.vsCashAndSpy}</p>
               </div>
               <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                 Expected outcome: {latestRecommendation.expectedOutcome} (horizon: {latestRecommendation.expectedTimeHorizon})

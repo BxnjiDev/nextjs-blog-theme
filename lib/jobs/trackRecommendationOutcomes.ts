@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider } from '@/lib/integrations';
 import type { HistoricalPricePoint } from '@/lib/integrations';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 export interface OutcomeJobResult {
   created: number;
@@ -33,8 +34,11 @@ function closePriceOnOrBefore(history: HistoricalPricePoint[], targetDate: Date)
 export async function runRecommendationOutcomesJob(): Promise<OutcomeJobResult> {
   const result: OutcomeJobResult = { created: 0, updated: 0, errors: [] };
 
+  const accountId = await getActiveAccountId();
+  if (!accountId) return result;
+
   const withoutOutcome = await prisma.recommendation.findMany({
-    where: { outcome: null },
+    where: { outcome: null, holding: { accountId } },
     orderBy: { generatedAt: 'asc' },
   });
 
@@ -68,7 +72,10 @@ export async function runRecommendationOutcomesJob(): Promise<OutcomeJobResult> 
   }
 
   const pending = await prisma.recommendationOutcome.findMany({
-    where: { OR: [{ return30d: null }, { return90d: null }, { return180d: null }, { return365d: null }] },
+    where: {
+      OR: [{ return30d: null }, { return90d: null }, { return180d: null }, { return365d: null }],
+      recommendation: { holding: { accountId } },
+    },
   });
 
   for (const outcome of pending) {

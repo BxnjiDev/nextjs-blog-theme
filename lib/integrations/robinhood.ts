@@ -15,13 +15,18 @@
  * secret to leak, because the app never holds brokerage credentials at
  * all; the connection lives in the agent's own MCP configuration.
  *
- * Given that, this module's job is narrow:
- *   1. Define the shape of data Atlas expects to receive FROM an agent
- *      session that has the MCP connector active (`syncFromAgent`).
- *   2. Persist trade proposals/executions the agent reports, through the
- *      TradeProposal model — so there's a durable, queryable log with
- *      reasoning/confidence/supporting data, independent of whatever
- *      chat transcript the trade happened in.
+ * Given that, this module's remaining job is narrow: persist trade
+ * proposals/executions the agent reports, through the TradeProposal
+ * model — so there's a durable, queryable log with reasoning/confidence/
+ * supporting data, independent of whatever chat transcript the trade
+ * happened in.
+ *
+ * Account/holding/transaction/open-order sync (what used to be a minimal
+ * `syncFromAgent` stub here) now lives in lib/domain/accountSync.ts — a
+ * validated, idempotent, reconciled, audit-logged version of the same
+ * idea, exposed via `npm run sync:account` (CLI) and `POST
+ * /api/sync/account`. See ARCHITECTURE.md's "Live-evaluation account sync"
+ * section.
  *
  * Nothing here calls out to Robinhood over HTTP, and nothing here places a
  * live trade. TradeProposal.mode is intentionally MANUAL_APPROVAL by
@@ -31,54 +36,6 @@
  */
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
-
-export interface AgentReportedHolding {
-  symbol: string;
-  name: string;
-  sector?: string;
-  quantity: number;
-  avgCostBasis: number;
-}
-
-export interface AgentSyncPayload {
-  accountExternalId: string;
-  cashBalance: number;
-  buyingPower: number;
-  holdings: AgentReportedHolding[];
-}
-
-/**
- * Upserts account + holdings from data an agent session read via the
- * Robinhood MCP connector. Call this after the agent fetches fresh account
- * state — this file does not fetch that state itself.
- */
-export async function syncFromAgent(payload: AgentSyncPayload) {
-  const account = await prisma.account.upsert({
-    where: { externalId: payload.accountExternalId },
-    update: {
-      cashBalance: payload.cashBalance,
-      buyingPower: payload.buyingPower,
-      lastSyncedAt: new Date(),
-    },
-    create: {
-      provider: 'robinhood',
-      externalId: payload.accountExternalId,
-      cashBalance: payload.cashBalance,
-      buyingPower: payload.buyingPower,
-      lastSyncedAt: new Date(),
-    },
-  });
-
-  for (const h of payload.holdings) {
-    await prisma.holding.upsert({
-      where: { accountId_symbol: { accountId: account.id, symbol: h.symbol } },
-      update: { quantity: h.quantity, avgCostBasis: h.avgCostBasis, sector: h.sector },
-      create: { ...h, accountId: account.id },
-    });
-  }
-
-  return account;
-}
 
 export interface RecordExecutionInput {
   tradeProposalId: string;
