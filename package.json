@@ -13,6 +13,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "sync:account": "tsx scripts/syncAccount.ts",
     "sync:validate": "tsx scripts/validateFirstSync.ts",
+    "sync:robinhood": "tsx scripts/syncRobinhood.ts",
+    "sync:robinhood:watch": "tsx scripts/syncRobinhoodWatch.ts",
     "robinhood:mcp": "tsx scripts/robinhoodMcpInspect.ts",
     "providers:check": "tsx scripts/checkProviders.ts",
     "scheduler": "tsx scripts/scheduler.ts",

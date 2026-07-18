@@ -43,3 +43,8 @@ next-env.d.ts
 
 # local scheduler logs (launchd/cron StandardOutPath — see launchd/README.md)
 /logs
+
+# Robinhood sync inbox — real account payloads (account numbers, balances,
+# holdings) land here before being ingested; never committed. See
+# lib/domain/robinhoodSyncIngest.ts.
+/data/robinhood-inbox

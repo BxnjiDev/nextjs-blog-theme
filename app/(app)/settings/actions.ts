@@ -4,6 +4,21 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { syncAccount } from '@/lib/domain/accountSync';
 import { runPostSyncPipeline } from '@/lib/domain/accountSyncPipeline';
+import { runJob } from '@/lib/domain/scheduler';
+import { prisma } from '@/lib/prisma';
+import type { RobinhoodIngestResult } from '@/lib/domain/robinhoodSyncIngest';
+
+/** The exact page set a successful sync can change the displayed data on
+ * — kept in one place so both sync entry points below revalidate
+ * identically. */
+function revalidateAfterSync(): void {
+  revalidatePath('/');
+  revalidatePath('/portfolio');
+  revalidatePath('/intelligence');
+  revalidatePath('/recommendations');
+  revalidatePath('/settings');
+  revalidatePath('/connections');
+}
 
 /**
  * Browser-facing entry point for the Phase 3.5 sync workflow
@@ -42,9 +57,38 @@ export async function syncRobinhoodPayload(formData: FormData): Promise<void> {
 
   await runPostSyncPipeline();
 
-  revalidatePath('/settings');
-  revalidatePath('/');
-  revalidatePath('/portfolio');
-  revalidatePath('/connections');
+  revalidateAfterSync();
+  redirect('/settings?synced=1');
+}
+
+/**
+ * The "Check inbox now" button — processes whatever's currently waiting in
+ * data/robinhood-inbox/ (see lib/domain/robinhoodSyncIngest.ts) via the
+ * exact same scheduler job the watch script (`npm run
+ * sync:robinhood:watch`) runs on a timer, so a manual click and the
+ * background loop can never race each other (the scheduler's Postgres
+ * lock, see lib/domain/scheduler.ts, is shared by both). Does not require
+ * pasting anything — for when an agent session has already dropped a
+ * payload on disk and you don't want to wait for the next scheduled tick.
+ */
+export async function checkRobinhoodInbox(): Promise<void> {
+  const outcome = await runJob('robinhoodSyncIngest', 'manual');
+  const run = await prisma.schedulerRun.findUnique({ where: { id: outcome.schedulerRunId! } });
+  const result = run?.result as unknown as RobinhoodIngestResult | null;
+
+  if (outcome.status === 'FAILURE') {
+    redirect('/settings?syncError=' + encodeURIComponent(run?.error ?? 'Inbox check failed for an unspecified reason.'));
+  }
+  if (outcome.status === 'SKIPPED') {
+    redirect('/settings?syncError=' + encodeURIComponent(run?.error ?? 'Another sync was already in progress — try again in a moment.'));
+  }
+  if (!result || result.filesFound === 0) {
+    redirect('/settings?syncInfo=' + encodeURIComponent('Checked the inbox — nothing waiting to sync.'));
+  }
+  if (result.rejected > 0 && result.synced === 0) {
+    redirect('/settings?syncError=' + encodeURIComponent(result.errors.join(' ')));
+  }
+
+  revalidateAfterSync();
   redirect('/settings?synced=1');
 }

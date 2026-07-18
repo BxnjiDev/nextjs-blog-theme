@@ -1,14 +1,13 @@
 import WidgetCard from './WidgetCard';
 import type { GlobalStatus } from '@/lib/domain/globalStatus';
+import { formatRelativeTime } from '@/lib/format';
 
 export default function LatestSyncWidget({ sync }: { sync: GlobalStatus['robinhoodSync'] }) {
   const label = !sync.lastSyncedAt
     ? 'Never synced'
     : sync.success === false
       ? 'Last sync rejected'
-      : sync.ageHours !== null
-        ? `${sync.ageHours.toFixed(0)}h ago`
-        : 'Synced';
+      : `Updated ${formatRelativeTime(sync.lastSyncedAt)}`;
 
   const tone = !sync.lastSyncedAt ? 'text-atlas-text-tertiary' : sync.success === false ? 'text-risk-high' : 'text-atlas-text';
 

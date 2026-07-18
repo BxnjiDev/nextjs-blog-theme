@@ -94,6 +94,7 @@ export function computeSimulatedMetrics(baseline: SimulatorBaseline, hypothetica
     largestWinner: null,
     largestLoser: null,
     asOf: new Date(),
+    lastSyncedAt: null,
   };
   const sectorWeights = computeSectorWeights(syntheticOverview);
   const largestPosition = [...views].sort((a, b) => b.marketValue - a.marketValue)[0] ?? null;

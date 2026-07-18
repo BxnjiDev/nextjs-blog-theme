@@ -16,6 +16,7 @@ import { runBriefingJob } from '@/lib/jobs/generateBriefing';
 import { runAlertDeliveryJob } from '@/lib/jobs/deliverAlerts';
 import { runLearningSuite } from './learningSuite';
 import { pruneOldProviderCallLogs } from './dataFreshness';
+import { runRobinhoodSyncIngest } from './robinhoodSyncIngest';
 
 /** How long a claimed lock is honored before it's considered abandoned
  * (e.g. the process was killed mid-run, or the MacBook slept hard enough
@@ -57,6 +58,12 @@ async function checkAccountSyncFreshness(): Promise<{ overdueSyncHours: number |
  */
 export const JOB_REGISTRY: Record<string, { label: string; run: () => Promise<unknown> }> = {
   accountSyncPrep: { label: 'Morning account sync freshness check', run: checkAccountSyncFreshness },
+  /// Processes whatever's waiting in data/robinhood-inbox/ (see
+  /// lib/domain/robinhoodSyncIngest.ts) — the automatable half of the
+  /// Robinhood sync workflow. Fetching the data still requires an agent
+  /// session with the MCP connector active; this job just means once that
+  /// data lands on disk, nothing further needs to happen by hand.
+  robinhoodSyncIngest: { label: 'Robinhood inbox sync', run: runRobinhoodSyncIngest },
   marketDataRefresh: { label: 'Market-data refresh', run: runPortfolioRefreshJob },
   fundamentalsRefresh: { label: 'Fundamentals refresh', run: runFundamentalsIngestJob },
   earningsRefresh: { label: 'Earnings refresh', run: runEarningsIngestJob },
@@ -79,6 +86,7 @@ export const JOB_REGISTRY: Record<string, { label: string; run: () => Promise<un
  * last since it reads everything. Matches accountSyncPipeline.ts. */
 export const RUN_ALL_ORDER = [
   'accountSyncPrep',
+  'robinhoodSyncIngest',
   'marketDataRefresh',
   'fundamentalsRefresh',
   'earningsRefresh',

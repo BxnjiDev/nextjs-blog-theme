@@ -28,6 +28,7 @@ export interface PortfolioOverview {
   largestWinner: HoldingView | null;
   largestLoser: HoldingView | null;
   asOf: Date;
+  lastSyncedAt: Date | null;
 }
 
 /**
@@ -117,5 +118,6 @@ export async function getPortfolioOverview(): Promise<PortfolioOverview | null> 
     largestWinner: sorted[0] ?? null,
     largestLoser: sorted[sorted.length - 1] ?? null,
     asOf: new Date(),
+    lastSyncedAt: account.lastSyncedAt,
   };
 }

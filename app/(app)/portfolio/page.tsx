@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { getPortfolioOverview } from '@/lib/domain/portfolio';
-import { formatCurrency, formatPercent } from '@/lib/format';
+import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/format';
 import StatCard from '@/components/StatCard';
 import DataQualityBadge from '@/components/DataQualityBadge';
 import AllocationDonut from '@/components/charts/AllocationDonut';
+import AutoRefresh from '@/components/AutoRefresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,7 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-8">
+      <AutoRefresh />
       <div>
         <h1 className="text-2xl font-semibold text-atlas-text">Portfolio Overview</h1>
         <p className="mt-1 text-sm text-atlas-text-secondary">
@@ -37,7 +39,7 @@ export default async function OverviewPage() {
           <Link href="/connections" className="underline">
             Connections
           </Link>
-          . Rendered {overview.asOf.toLocaleString()}.
+          . Last updated {formatRelativeTime(overview.lastSyncedAt)}.
         </p>
       </div>
 

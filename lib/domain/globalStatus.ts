@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { getDataFreshnessSnapshot, type DataSourceFreshness } from './dataFreshness';
 import { getOperatingMode, type OperatingMode } from './operatingMode';
+import { getActiveAccountId } from './portfolio';
 
 export interface GlobalStatus {
   mode: OperatingMode;
@@ -19,9 +20,18 @@ export interface GlobalStatus {
 }
 
 export async function getGlobalStatus(): Promise<GlobalStatus> {
+  const activeAccountId = await getActiveAccountId();
   const [freshness, latestSyncLog, latestBriefing] = await Promise.all([
     getDataFreshnessSnapshot(),
-    prisma.syncLog.findFirst({ orderBy: { syncedAt: 'desc' } }),
+    // Scoped to the active account so a rejected sync attempt for some
+    // *other* account (a stale test fixture, an old CLI experiment, a
+    // future second account) can never override the real account's
+    // status just for being more recent — accountId is null on
+    // schema-rejected payloads (rejected before an account is resolved),
+    // so those never belong to any account's status anyway.
+    activeAccountId
+      ? prisma.syncLog.findFirst({ where: { accountId: activeAccountId }, orderBy: { syncedAt: 'desc' } })
+      : null,
     prisma.briefing.findFirst({ orderBy: { generatedAt: 'desc' } }),
   ]);
 

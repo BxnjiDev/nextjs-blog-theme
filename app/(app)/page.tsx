@@ -13,6 +13,7 @@ import RecentDecisionsWidget from '@/components/home/RecentDecisionsWidget';
 import PerformanceSnapshotWidget from '@/components/home/PerformanceSnapshotWidget';
 import RecommendationCard from '@/components/RecommendationCard';
 import WidgetCard from '@/components/home/WidgetCard';
+import AutoRefresh from '@/components/AutoRefresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,7 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-8">
+      <AutoRefresh />
       <div>
         <h1 className="text-2xl font-semibold text-atlas-text">
           {data.greeting}
