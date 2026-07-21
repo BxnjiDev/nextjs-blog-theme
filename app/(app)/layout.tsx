@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
 
   return (
-    <div className="atlas-shell flex min-h-screen">
+    <div className="atlas-shell flex min-h-screen flex-col md:flex-row">
       <Sidebar userEmail={user.email} />
       <div className="flex min-h-screen flex-1 flex-col overflow-y-auto">
         {evaluationAccount && <EvaluationBanner />}
