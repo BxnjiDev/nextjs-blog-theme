@@ -6,7 +6,7 @@ import { getGlobalStatus } from '@/lib/domain/globalStatus';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { ROBINHOOD_INBOX_DIR, type RobinhoodIngestResult } from '@/lib/domain/robinhoodSyncIngest';
 import { prisma } from '@/lib/prisma';
-import { logout } from '@/app/login/actions';
+import LockAtlasButton from '@/components/init/LockAtlasButton';
 import { formatRelativeTime } from '@/lib/format';
 import StatusBanner from '@/components/StatusBanner';
 import { syncRobinhoodPayload, checkRobinhoodInbox } from './actions';
@@ -52,11 +52,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { s
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Account</h2>
         <div className="flex items-center justify-between">
           <p className="text-sm text-atlas-text">{user.email}</p>
-          <form action={logout}>
-            <button type="submit" className="rounded-lg border border-atlas-border px-3 py-1.5 text-xs text-atlas-text-secondary hover:text-atlas-text">
-              Sign out
-            </button>
-          </form>
+          <LockAtlasButton className="rounded-lg border border-atlas-border px-3 py-1.5 text-xs text-atlas-text-secondary hover:text-atlas-text" />
         </div>
       </div>
 

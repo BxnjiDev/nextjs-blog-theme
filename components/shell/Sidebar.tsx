@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { logout } from '@/app/login/actions';
+import LockAtlasButton from '@/components/init/LockAtlasButton';
 
 const PRIMARY_LINKS = [
   { href: '/', label: 'Home', icon: Home },
@@ -159,11 +159,7 @@ function AccountFooter({ userEmail }: { userEmail: string }) {
           <p className="truncate text-xs text-atlas-text" title={userEmail}>
             {userEmail}
           </p>
-          <form action={logout}>
-            <button type="submit" className="text-[11px] text-atlas-text-tertiary underline decoration-dotted hover:text-atlas-text-secondary">
-              Sign out
-            </button>
-          </form>
+          <LockAtlasButton className="text-[11px] text-atlas-text-tertiary underline decoration-dotted hover:text-atlas-text-secondary" />
         </div>
       </div>
     </div>
