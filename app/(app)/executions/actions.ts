@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 
@@ -59,9 +60,16 @@ export async function recordManualExecution(input: RecordManualExecutionInput): 
 /** Plain-form adapter — the rest of the app's mutations (e.g.
  * setRecommendationDecision) use plain `<form action={...}>` with no
  * client JS, and this follows the same convention rather than introducing
- * a client component just for this page. */
+ * a client component just for this page.
+ *
+ * recordManualExecution() already computes a validation error message for
+ * every rejected input — this previously discarded that return value
+ * entirely (`await recordManualExecution(...)` with no result used), so a
+ * bad quantity or missing symbol failed completely silently with no
+ * feedback. Now surfaces it the same way every other mutation in the app
+ * does: redirect with a searchParam the page reads into a StatusBanner. */
 export async function recordManualExecutionFromForm(formData: FormData): Promise<void> {
-  await recordManualExecution({
+  const result = await recordManualExecution({
     symbol: String(formData.get('symbol') ?? ''),
     side: (String(formData.get('side') ?? 'BUY') as 'BUY' | 'SELL'),
     executedAt: String(formData.get('executedAt') ?? ''),
@@ -72,4 +80,9 @@ export async function recordManualExecutionFromForm(formData: FormData): Promise
     note: String(formData.get('note') ?? ''),
     recommendationId: String(formData.get('recommendationId') ?? '') || null,
   });
+
+  if (!result.ok) {
+    redirect('/executions?error=' + encodeURIComponent(result.error ?? 'Could not record this execution.'));
+  }
+  redirect('/executions?recorded=1');
 }
