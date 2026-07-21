@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import ActionBadge from '@/components/ActionBadge';
+import Badge from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import SectionHeading from '@/components/ui/SectionHeading';
+import StatStrip, { Stat } from '@/components/ui/Stat';
+import { ACTION_TONE, ACTION_LABEL, DECISION_TONE, TONE_TEXT } from '@/lib/theme/tone';
 import RecommendationCard from '@/components/RecommendationCard';
 import FadeInView from '@/components/motion/FadeInView';
 import { formatPercent } from '@/lib/format';
@@ -10,14 +14,6 @@ import { setRecommendationDecision } from './actions';
 export const dynamic = 'force-dynamic';
 
 const DECISION_FILTERS = ['ALL', 'PENDING', 'ACCEPTED', 'PARTIALLY_ACCEPTED', 'REJECTED', 'DEFERRED'] as const;
-
-const DECISION_STYLES: Record<string, string> = {
-  PENDING: 'text-atlas-text-tertiary',
-  ACCEPTED: 'text-risk-low',
-  PARTIALLY_ACCEPTED: 'text-atlas-warning',
-  REJECTED: 'text-risk-high',
-  DEFERRED: 'text-atlas-steel',
-};
 
 export default async function RecommendationHistoryPage({ searchParams }: { searchParams: { decision?: string } }) {
   const filter = DECISION_FILTERS.includes((searchParams.decision ?? 'ALL') as (typeof DECISION_FILTERS)[number])
@@ -56,42 +52,19 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
 
       {scorecard && (
         <FadeInView delay={0.05}>
-          <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Total recommendations</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{scorecard.totalRecommendations}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Win rate</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">
-                {scorecard.winRatePct !== null ? `${scorecard.winRatePct.toFixed(0)}%` : 'n/a'}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Avg alpha (90d)</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">
-                {scorecard.alphaVsSpyAvgPct !== null ? formatPercent(scorecard.alphaVsSpyAvgPct) : 'n/a'}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Utilization</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">
-                {scorecard.utilizationPct !== null ? `${scorecard.utilizationPct.toFixed(0)}%` : 'n/a'}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Acceptance rate</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">
-                {scorecard.acceptanceRatePct !== null ? `${scorecard.acceptanceRatePct.toFixed(0)}%` : 'n/a'}
-              </p>
-            </div>
-          </div>
+          <StatStrip>
+            <Stat label="Total recommendations" value={scorecard.totalRecommendations} />
+            <Stat label="Win rate" value={scorecard.winRatePct !== null ? `${scorecard.winRatePct.toFixed(0)}%` : 'n/a'} />
+            <Stat label="Avg alpha (90d)" value={scorecard.alphaVsSpyAvgPct !== null ? formatPercent(scorecard.alphaVsSpyAvgPct) : 'n/a'} />
+            <Stat label="Utilization" value={scorecard.utilizationPct !== null ? `${scorecard.utilizationPct.toFixed(0)}%` : 'n/a'} />
+            <Stat label="Acceptance rate" value={scorecard.acceptanceRatePct !== null ? `${scorecard.acceptanceRatePct.toFixed(0)}%` : 'n/a'} />
+          </StatStrip>
         </FadeInView>
       )}
 
       {recommendations.length > 0 && (
         <div>
-          <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Latest briefings</h2>
+          <SectionHeading className="mb-4">Latest briefings</SectionHeading>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {recommendations.slice(0, 4).map((r) => (
               <RecommendationCard
@@ -132,7 +105,7 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
         </div>
 
         {recommendations.length === 0 ? (
-          <p className="text-sm text-atlas-text-tertiary">No recommendations match this filter.</p>
+          <EmptyState>No recommendations match this filter.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -160,12 +133,12 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
                         </Link>
                       </td>
                       <td className="py-3 pr-4">
-                        <ActionBadge action={r.action} />
+                        <Badge tone={ACTION_TONE[r.action] ?? 'neutral'}>{ACTION_LABEL[r.action] ?? r.action}</Badge>
                       </td>
                       <td className="py-3 pr-4 font-mono text-atlas-text-secondary">{r.confidenceScore}/10</td>
                       <td className="py-3 pr-4 font-mono text-atlas-text-secondary">{conviction !== null ? `${conviction}/100` : 'n/a'}</td>
                       <td className="py-3 pr-4">
-                        <span className={`text-xs font-medium ${DECISION_STYLES[r.userDecision] ?? DECISION_STYLES.PENDING}`}>
+                        <span className={`text-xs font-medium ${TONE_TEXT[DECISION_TONE[r.userDecision] ?? 'muted']}`}>
                           {r.userDecision.replace(/_/g, ' ').toLowerCase()}
                         </span>
                       </td>

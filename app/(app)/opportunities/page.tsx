@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import ConfidenceMeter from '@/components/intelligence/ConfidenceMeter';
+import Meter from '@/components/ui/Meter';
 import FadeInView from '@/components/motion/FadeInView';
 
 export const dynamic = 'force-dynamic';
@@ -69,7 +69,7 @@ export default async function OpportunitiesPage() {
                 )}
               </div>
               <div className="sm:pt-1">
-                <ConfidenceMeter score={o.confidenceScore} max={10} label="Confidence" />
+                <Meter score={o.confidenceScore} max={10} label="Confidence" />
               </div>
             </div>
           </FadeInView>

@@ -6,6 +6,9 @@ import { Orbit, Table2 } from 'lucide-react';
 import AllocationDonut from '@/components/charts/AllocationDonut';
 import HoldingsTable from './HoldingsTable';
 import HoldingsConstellation from './HoldingsConstellation';
+import Panel from '@/components/ui/Panel';
+import SectionHeading from '@/components/ui/SectionHeading';
+import SegmentedControl from '@/components/ui/SegmentedControl';
 import type { HoldingView } from '@/lib/domain/portfolio';
 
 const PALETTE = ['#8b5cf6', '#87828f', '#d946ef', '#a6a1b3', '#4c1d95', '#5c5866', '#c4b5fd', '#3f3c48', '#701a75'];
@@ -41,8 +44,8 @@ export default function PortfolioComposition({ holdings, totalValue, cashBalance
 
   return (
     <div className="grid gap-10 lg:grid-cols-[280px_1fr]">
-      <div className="atlas-glass rounded-2xl p-5">
-        <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Allocation</h2>
+      <Panel className="p-5">
+        <SectionHeading className="mb-1">Allocation</SectionHeading>
         <AllocationDonut height={200} data={slices} />
         <ul className="mt-2 space-y-1">
           {slices.map((s, i) => {
@@ -69,36 +72,20 @@ export default function PortfolioComposition({ holdings, totalValue, cashBalance
             );
           })}
         </ul>
-      </div>
+      </Panel>
 
       <div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Holdings</h2>
+          <SectionHeading>Holdings</SectionHeading>
           <div className="flex items-center gap-3">
-            <div className="flex rounded-lg border border-atlas-border p-0.5">
-              <button
-                type="button"
-                onClick={() => setView('constellation')}
-                aria-pressed={view === 'constellation'}
-                className={`atlas-press hidden items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors sm:flex ${
-                  view === 'constellation' ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-tertiary hover:text-atlas-text-secondary'
-                }`}
-              >
-                <Orbit size={13} strokeWidth={1.75} aria-hidden="true" />
-                Constellation
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('table')}
-                aria-pressed={view === 'table'}
-                className={`atlas-press flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  view === 'table' ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-tertiary hover:text-atlas-text-secondary'
-                }`}
-              >
-                <Table2 size={13} strokeWidth={1.75} aria-hidden="true" />
-                Table
-              </button>
-            </div>
+            <SegmentedControl
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'constellation', label: 'Constellation', icon: Orbit, hideOnMobile: true },
+                { value: 'table', label: 'Table', icon: Table2 },
+              ]}
+            />
             <p className="hidden text-xs text-atlas-text-tertiary lg:block">
               Deeper analysis on{' '}
               <Link href="/intelligence" className="underline decoration-atlas-border hover:decoration-atlas-text-secondary">

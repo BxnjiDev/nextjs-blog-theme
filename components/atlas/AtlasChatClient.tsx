@@ -9,6 +9,8 @@ import SuggestedPrompts from './SuggestedPrompts';
 import TypingIndicator from './TypingIndicator';
 import StatusBanner from '@/components/StatusBanner';
 import AtlasCore from '@/components/atlas-identity/AtlasCore';
+import { MOTION } from '@/lib/motion/tokens';
+import { ICON_SIZE, ICON_STROKE } from '@/lib/ui/iconSize';
 
 interface StreamEvent {
   type: 'conversation' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
@@ -134,7 +136,7 @@ export default function AtlasChatClient({
             aria-label="Open conversations"
             className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-atlas-text-secondary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text md:hidden"
           >
-            <MessageSquareText size={16} strokeWidth={1.75} />
+            <MessageSquareText size={ICON_SIZE.md} strokeWidth={ICON_STROKE} />
           </button>
         )}
         <AtlasCore state={coreState} size="sm" />
@@ -147,10 +149,10 @@ export default function AtlasChatClient({
           <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
             <motion.div
               animate={{ boxShadow: ['0 0 0 0 rgba(59,130,246,0.3)', '0 0 0 14px rgba(59,130,246,0)'] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeOut' }}
+              transition={{ duration: MOTION.duration.pulse, repeat: Infinity, ease: MOTION.ease.out }}
               className="flex h-12 w-12 items-center justify-center rounded-2xl bg-atlas-accent text-white"
             >
-              <Sparkles size={20} strokeWidth={1.75} />
+              <Sparkles size={ICON_SIZE.lg} strokeWidth={ICON_STROKE} />
             </motion.div>
             <div>
               <h2 className="text-lg font-semibold text-atlas-text">Ask Atlas</h2>
@@ -168,7 +170,7 @@ export default function AtlasChatClient({
                   key={m.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: MOTION.duration.stream, ease: MOTION.ease.standard }}
                 >
                   <ChatMessageBubble message={m} />
                 </motion.div>
@@ -209,10 +211,10 @@ export default function AtlasChatClient({
             type="submit"
             whileTap={{ scale: 0.9 }}
             disabled={isStreaming || !input.trim()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-atlas-accent text-white transition-opacity disabled:opacity-30"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-atlas-accent text-white transition-[opacity,box-shadow] hover:shadow-glow-accent disabled:opacity-30 disabled:hover:shadow-none"
             aria-label="Send"
           >
-            <SendHorizontal size={14} />
+            <SendHorizontal size={ICON_SIZE.sm} />
           </motion.button>
         </div>
       </form>

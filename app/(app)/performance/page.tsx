@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import ActionBadge from '@/components/ActionBadge';
+import Badge from '@/components/ui/Badge';
+import { ACTION_TONE, ACTION_LABEL } from '@/lib/theme/tone';
 import FadeInView from '@/components/motion/FadeInView';
 import { formatPercent } from '@/lib/format';
 
@@ -98,7 +99,7 @@ export default async function PerformancePage() {
                   <tr key={o.id} className="border-b border-atlas-border-subtle/60 text-atlas-text transition-colors hover:bg-atlas-surface-hover">
                     <td className="py-3 pr-4 font-medium">{o.symbol}</td>
                     <td className="py-3 pr-4">
-                      <ActionBadge action={o.action} />
+                      <Badge tone={ACTION_TONE[o.action] ?? 'neutral'}>{ACTION_LABEL[o.action] ?? o.action}</Badge>
                     </td>
                     <td className="py-3 pr-4 font-mono text-xs text-atlas-text-tertiary">{o.recommendedAt.toLocaleDateString()}</td>
                     <td className="py-3 pr-4">

@@ -6,6 +6,17 @@ module.exports = {
   // "dark mode first" per the Atlas OS design brief — while every existing
   // page's dark: utility classes keep working unchanged.
   darkMode: 'class',
+  // Radius role convention (an audit found rounded-md/lg/xl/2xl picked
+  // arbitrarily per-file for what were structurally the same containers —
+  // this is the scale every component should pick from instead):
+  //   rounded-full  — pills, badges, avatars, orbs, dots
+  //   rounded-lg    — small interactive controls: buttons, inputs,
+  //                   segmented-control segments, icon-only squares
+  //   rounded-xl    — standard content containers (the default "card")
+  //   rounded-2xl   — hero/feature surfaces, modals, large focal panels
+  //   rounded-md    — reserved for a control nested inside a rounded-lg
+  //                   parent that needs a visibly smaller radius; never a
+  //                   top-level container or badge on its own
   theme: {
     extend: {
       colors: {

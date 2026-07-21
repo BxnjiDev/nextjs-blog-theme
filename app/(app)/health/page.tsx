@@ -1,8 +1,12 @@
 import { prisma } from '@/lib/prisma';
-import RiskGauge from '@/components/RiskGauge';
+import Meter from '@/components/ui/Meter';
+import EmptyState from '@/components/ui/EmptyState';
+import SectionHeading from '@/components/ui/SectionHeading';
+import AtlasCore from '@/components/atlas-identity/AtlasCore';
+import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import TrendLineChart from '@/components/charts/TrendLineChart';
 import FadeInView from '@/components/motion/FadeInView';
-import AnimatedNumber from '@/components/motion/AnimatedNumber';
+import { atlasStateForScore } from '@/lib/theme/tone';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,12 +29,13 @@ export default async function HealthPage() {
   });
   const latest = history[history.length - 1];
   const chartData = history.map((h) => ({ label: h.generatedAt.toLocaleDateString(), value: h.overallScore }));
+  const delta = latest?.previousScore != null ? latest.overallScore - latest.previousScore : null;
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-14">
       <FadeInView>
+        <h1 className="sr-only">Portfolio health</h1>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Health</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-atlas-text">Portfolio health</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
           Deterministic composite score (0-100, higher is healthier) across diversification, quality, growth, risk,
           valuation, sector balance, cash allocation, concentration, and macro exposure.
@@ -38,29 +43,36 @@ export default async function HealthPage() {
       </FadeInView>
 
       {!latest ? (
-        <p className="text-sm text-atlas-text-tertiary">No health assessment generated yet.</p>
+        <EmptyState>No health assessment generated yet.</EmptyState>
       ) : (
         <>
+          {/* Same orb + value hero language as Home/Portfolio/Risk — the
+              orb's color reads health directly instead of a bare number. */}
           <FadeInView delay={0.05}>
-            <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Overall health score</p>
-                <AnimatedNumber value={latest.overallScore} format="integer" className="mt-1 block text-5xl font-semibold text-atlas-text" />
-                <p className="mt-1 text-xs text-atlas-text-tertiary">/100</p>
-                {latest.previousScore !== null && (
-                  <p className="mt-2 text-sm text-atlas-text-secondary">
-                    Previous: {latest.previousScore} (
-                    <span className={latest.overallScore - latest.previousScore >= 0 ? 'text-risk-low' : 'text-risk-high'}>
-                      {latest.overallScore - latest.previousScore >= 0 ? '+' : ''}
-                      {latest.overallScore - latest.previousScore}
-                    </span>
-                    )
-                  </p>
-                )}
-                <p className="mt-2 text-xs text-atlas-text-tertiary">Generated {latest.generatedAt.toLocaleString()}</p>
+            <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr]">
+              <div className="flex items-center gap-6">
+                <AtlasCore state={atlasStateForScore(latest.overallScore)} size="xl" className="shrink-0" />
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Overall health score</p>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <AnimatedNumber value={latest.overallScore} format="integer" className="text-5xl font-semibold text-atlas-text" />
+                    <span className="text-sm text-atlas-text-tertiary">/100</span>
+                  </div>
+                  {delta !== null && (
+                    <p className="mt-2 text-sm text-atlas-text-secondary">
+                      Previous: {latest.previousScore} (
+                      <span className={delta >= 0 ? 'text-risk-low' : 'text-risk-high'}>
+                        {delta >= 0 ? '+' : ''}
+                        {delta}
+                      </span>
+                      )
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-atlas-text-tertiary">Generated {latest.generatedAt.toLocaleString()}</p>
+                </div>
               </div>
               <div>
-                <p className="mb-2 text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Trend</p>
+                <SectionHeading className="mb-2">Trend</SectionHeading>
                 <TrendLineChart data={chartData} domain={[0, 100]} color="#34d399" />
               </div>
             </div>
@@ -69,7 +81,7 @@ export default async function HealthPage() {
           <FadeInView delay={0.1}>
             <div className="grid gap-x-8 gap-y-6 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
               {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
-                <RiskGauge key={key} label={label} score={(latest as unknown as Record<string, number>)[key]} invert />
+                <Meter key={key} label={label} score={(latest as unknown as Record<string, number>)[key]} />
               ))}
             </div>
           </FadeInView>

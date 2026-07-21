@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
+import { MOTION } from '@/lib/motion/tokens';
 
 /**
  * The shared component behind every route's error.tsx. Deliberately calm,
@@ -20,7 +21,7 @@ export default function ErrorState({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: MOTION.duration.panel, ease: MOTION.ease.standard }}
       className="atlas-glass mx-auto max-w-md rounded-2xl p-8 text-center"
     >
       <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-risk-high/10 text-risk-high">

@@ -7,20 +7,10 @@ import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/format'
 import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
-import AtlasCore, { type AtlasCoreState } from '@/components/atlas-identity/AtlasCore';
+import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import PerformanceChart from '@/components/portfolio/PerformanceChart';
 import PortfolioComposition from '@/components/portfolio/PortfolioComposition';
-
-/** Same orb vocabulary as Home's AtlasReadout, driven by portfolio risk
- * instead of portfolio health — the shared hero language (value + a
- * companion orb) that gives Home and Portfolio one continuous identity,
- * each reading its own most relevant signal. */
-function riskState(score: number | null): AtlasCoreState {
-  if (score == null) return 'offline';
-  if (score < 40) return 'ready';
-  if (score < 70) return 'idle';
-  return 'attention';
-}
+import { atlasStateForScore } from '@/lib/theme/tone';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,9 +54,10 @@ export default async function OverviewPage() {
           Everything else here is secondary to this one number. */}
       <FadeInView>
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-          <AtlasCore state={riskState(latestRisk?.overallScore ?? null)} size="xl" className="shrink-0" />
+          <AtlasCore state={atlasStateForScore(latestRisk?.overallScore ?? null, true)} size="xl" className="shrink-0" />
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Portfolio</p>
+            <h1 className="sr-only">Portfolio</h1>
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary" aria-hidden="true">Portfolio</p>
             <div className="mt-3 flex flex-wrap items-baseline gap-4">
               <AnimatedNumber
                 value={overview.totalValue}

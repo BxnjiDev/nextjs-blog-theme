@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getPortfolioIntelligence } from '@/lib/domain/intelligence';
-import ConfidenceMeter from '@/components/intelligence/ConfidenceMeter';
+import Meter from '@/components/ui/Meter';
 import FadeInView from '@/components/motion/FadeInView';
 
 export const dynamic = 'force-dynamic';
@@ -82,7 +82,7 @@ export default async function IntelligencePage() {
 
                 {h.currentConviction !== null && (
                   <div className="mt-4 max-w-xs">
-                    <ConfidenceMeter score={h.currentConviction} label="Conviction" />
+                    <Meter score={h.currentConviction} label="Conviction" />
                   </div>
                 )}
 

@@ -2,6 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { formatPercent } from '@/lib/format';
 import TrendLineChart from '@/components/charts/TrendLineChart';
 import FadeInView from '@/components/motion/FadeInView';
+import EmptyState from '@/components/ui/EmptyState';
+import SectionHeading from '@/components/ui/SectionHeading';
+import StatStrip, { Stat } from '@/components/ui/Stat';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +29,7 @@ export default async function ScorecardPage() {
   const buckets = latestCalibration ? (latestCalibration.buckets as unknown as CalibrationBucket[]) : [];
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-14">
       <FadeInView>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Scorecard</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-atlas-text">Scorecard, calibration &amp; patterns</h1>
@@ -39,72 +42,69 @@ export default async function ScorecardPage() {
       </FadeInView>
 
       {!latest ? (
-        <p className="text-sm text-atlas-text-tertiary">No scorecard computed yet — needs at least one recommendation on record.</p>
+        <EmptyState>No scorecard computed yet — needs at least one recommendation on record.</EmptyState>
       ) : (
         <FadeInView delay={0.05}>
-          <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Total recommendations</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{latest.totalRecommendations}</p>
-              <p className="mt-0.5 text-xs text-atlas-text-tertiary">
-                {latest.buyCount} buy · {latest.holdCount} hold · {latest.reduceCount} reduce · {latest.sellCount} sell · {latest.watchCount} watch
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Win rate</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{latest.winRatePct !== null ? `${latest.winRatePct.toFixed(0)}%` : 'No graded calls'}</p>
-              <p className="mt-0.5 text-xs text-atlas-text-tertiary">
-                {latest.falsePositives} false pos · {latest.falseNegatives} false neg
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Avg. alpha vs. SPY (90d)</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{latest.alphaVsSpyAvgPct !== null ? formatPercent(latest.alphaVsSpyAvgPct) : 'n/a'}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Avg. revisit gap (proxy)</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{latest.avgHoldingPeriodDays !== null ? `${latest.avgHoldingPeriodDays.toFixed(0)}d` : 'n/a'}</p>
-              <p className="mt-0.5 text-xs text-atlas-text-tertiary">No execution layer — see methodology.</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Avg. gain / drawdown (proxy)</p>
-              <p className="mt-1 font-mono text-lg">
-                <span className="text-risk-low">{latest.avgGainPct !== null ? formatPercent(latest.avgGainPct) : 'n/a'}</span>
-                <span className="text-atlas-text-tertiary"> / </span>
-                <span className="text-risk-high">{latest.avgDrawdownPct !== null ? `-${latest.avgDrawdownPct.toFixed(1)}%` : 'n/a'}</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Utilization</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{latest.utilizationPct !== null ? `${latest.utilizationPct.toFixed(0)}%` : 'n/a'}</p>
-              <p className="mt-0.5 text-xs text-atlas-text-tertiary">% with any recorded decision</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Acceptance rate</p>
-              <p className="mt-1 font-mono text-lg text-atlas-text">{latest.acceptanceRatePct !== null ? `${latest.acceptanceRatePct.toFixed(0)}%` : 'n/a'}</p>
-              <p className="mt-0.5 text-xs text-atlas-text-tertiary">
-                of decided recs accepted — see{' '}
-                <a href="/recommendations" className="text-atlas-accent-bright underline">
-                  history
-                </a>
-              </p>
-            </div>
-          </div>
+          <StatStrip>
+            <Stat
+              label="Total recommendations"
+              value={latest.totalRecommendations}
+              meta={`${latest.buyCount} buy · ${latest.holdCount} hold · ${latest.reduceCount} reduce · ${latest.sellCount} sell · ${latest.watchCount} watch`}
+            />
+            <Stat
+              label="Win rate"
+              value={latest.winRatePct !== null ? `${latest.winRatePct.toFixed(0)}%` : 'No graded calls'}
+              meta={`${latest.falsePositives} false pos · ${latest.falseNegatives} false neg`}
+            />
+            <Stat label="Avg. alpha vs. SPY (90d)" value={latest.alphaVsSpyAvgPct !== null ? formatPercent(latest.alphaVsSpyAvgPct) : 'n/a'} />
+            <Stat
+              label="Avg. revisit gap (proxy)"
+              value={latest.avgHoldingPeriodDays !== null ? `${latest.avgHoldingPeriodDays.toFixed(0)}d` : 'n/a'}
+              meta="No execution layer — see methodology."
+            />
+            <Stat
+              label="Avg. gain / drawdown (proxy)"
+              value={
+                <>
+                  <span className="text-risk-low">{latest.avgGainPct !== null ? formatPercent(latest.avgGainPct) : 'n/a'}</span>
+                  <span className="text-atlas-text-tertiary"> / </span>
+                  <span className="text-risk-high">{latest.avgDrawdownPct !== null ? `-${latest.avgDrawdownPct.toFixed(1)}%` : 'n/a'}</span>
+                </>
+              }
+            />
+            <Stat
+              label="Utilization"
+              value={latest.utilizationPct !== null ? `${latest.utilizationPct.toFixed(0)}%` : 'n/a'}
+              meta="% with any recorded decision"
+            />
+            <Stat
+              label="Acceptance rate"
+              value={latest.acceptanceRatePct !== null ? `${latest.acceptanceRatePct.toFixed(0)}%` : 'n/a'}
+              meta={
+                <>
+                  of decided recs accepted — see{' '}
+                  <a href="/recommendations" className="text-atlas-accent-bright underline">
+                    history
+                  </a>
+                </>
+              }
+            />
+          </StatStrip>
         </FadeInView>
       )}
 
       {scorecards.length > 1 && (
         <FadeInView delay={0.1}>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Win rate trend</h2>
+          <SectionHeading className="mb-3">Win rate trend</SectionHeading>
           <TrendLineChart data={winRateTrend} domain={[0, 100]} />
         </FadeInView>
       )}
 
       <FadeInView delay={0.15}>
         <div className="border-t border-atlas-border-subtle pt-8">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Confidence calibration</h2>
+          <SectionHeading className="mb-3">Confidence calibration</SectionHeading>
           {!latestCalibration ? (
-            <p className="text-sm text-atlas-text-tertiary">No graded recommendations yet — nothing to calibrate against.</p>
+            <EmptyState>No graded recommendations yet — nothing to calibrate against.</EmptyState>
           ) : (
             <>
               <p className="mb-4 text-sm text-atlas-text-secondary">
@@ -115,14 +115,12 @@ export default async function ScorecardPage() {
               </p>
               <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
                 {buckets.map((b) => (
-                  <div key={b.label}>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">{b.label}</p>
-                    <p className="mt-1 font-mono text-lg text-atlas-text">{b.actualWinRatePct !== null ? `${b.actualWinRatePct.toFixed(0)}%` : 'n/a'}</p>
-                    <p className="mt-0.5 text-xs text-atlas-text-tertiary">
-                      n={b.sampleSize}
-                      {b.note ? ` — ${b.note}` : ''}
-                    </p>
-                  </div>
+                  <Stat
+                    key={b.label}
+                    label={b.label}
+                    value={b.actualWinRatePct !== null ? `${b.actualWinRatePct.toFixed(0)}%` : 'n/a'}
+                    meta={`n=${b.sampleSize}${b.note ? ` — ${b.note}` : ''}`}
+                  />
                 ))}
               </div>
             </>
@@ -132,12 +130,12 @@ export default async function ScorecardPage() {
 
       <FadeInView delay={0.2}>
         <div className="border-t border-atlas-border-subtle pt-8">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Detected patterns</h2>
+          <SectionHeading className="mb-3">Detected patterns</SectionHeading>
           {patterns.length === 0 ? (
-            <p className="text-sm text-atlas-text-tertiary">
+            <EmptyState>
               No pattern has yet cleared the minimum sample-size threshold — with this few recommendations on
               record, that&rsquo;s the honest result, not a missing feature.
-            </p>
+            </EmptyState>
           ) : (
             <ul className="space-y-4">
               {patterns.map((p) => (

@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+import SectionHeading from '@/components/ui/SectionHeading';
+import SegmentedControl from '@/components/ui/SegmentedControl';
+import EmptyState from '@/components/ui/EmptyState';
 import { formatPercent } from '@/lib/format';
 import { MOTION } from '@/lib/motion/tokens';
 import type { PerformanceHistoryPoint } from '@/lib/domain/performance';
@@ -34,7 +37,7 @@ export default function PerformanceChart({ history }: { history: PerformanceHist
   return (
     <div>
       <div>
-        <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Performance</h2>
+        <SectionHeading>Performance</SectionHeading>
         {ret ? (
           <p className={`mt-1 font-mono text-2xl sm:text-3xl ${positive ? 'text-risk-low' : 'text-risk-high'}`}>
             {formatPercent(ret.returnPercent)}
@@ -44,7 +47,7 @@ export default function PerformanceChart({ history }: { history: PerformanceHist
             </span>
           </p>
         ) : (
-          <p className="mt-1 text-sm text-atlas-text-tertiary">Not enough snapshot history for this window yet.</p>
+          <EmptyState compact className="mt-1">Not enough snapshot history for this window yet.</EmptyState>
         )}
       </div>
 
@@ -53,21 +56,12 @@ export default function PerformanceChart({ history }: { history: PerformanceHist
           pill, top-right) instead of sharing a header row with it. */}
       <div className="relative mt-3">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-atlas-mesh opacity-30" />
-        <div className="absolute right-1 top-1 z-10 flex rounded-lg border border-atlas-border bg-atlas-surface/70 p-0.5 backdrop-blur-sm sm:right-2 sm:top-2">
-          {PERIODS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              aria-pressed={period === p}
-              className={`atlas-press rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                period === p ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-tertiary hover:text-atlas-text-secondary'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={period}
+          onChange={setPeriod}
+          options={PERIODS.map((p) => ({ value: p, label: p }))}
+          className="absolute right-1 top-1 z-10 border-atlas-border bg-atlas-surface/70 backdrop-blur-sm sm:right-2 sm:top-2"
+        />
 
         <AnimatePresence mode="wait">
           <motion.div

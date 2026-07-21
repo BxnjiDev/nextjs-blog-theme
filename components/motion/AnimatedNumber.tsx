@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useMotionValue, useTransform, animate } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 export type NumberFormat = 'integer' | 'currency0' | 'score100' | 'percent2';
 
@@ -26,7 +27,7 @@ export default function AnimatedNumber({
   value,
   format = 'integer',
   className,
-  duration = 1,
+  duration = MOTION.duration.count,
 }: {
   value: number;
   format?: NumberFormat;
@@ -39,7 +40,7 @@ export default function AnimatedNumber({
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    const controls = animate(motionValue, value, { duration, ease: [0.16, 1, 0.3, 1] });
+    const controls = animate(motionValue, value, { duration, ease: MOTION.ease.standard });
     return controls.stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);

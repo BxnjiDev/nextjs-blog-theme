@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
+import { MOTION } from '@/lib/motion/tokens';
 
 const VARIANTS = {
   success: { icon: CheckCircle2, className: 'border-risk-low/20 bg-risk-low/10 text-risk-low' },
@@ -27,7 +28,7 @@ export default function StatusBanner({
     <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: MOTION.duration.stage, ease: MOTION.ease.standard }}
       className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${variantClassName} ${className}`}
     >
       <Icon size={14} strokeWidth={2} className="mt-0.5 shrink-0" />

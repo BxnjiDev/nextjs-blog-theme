@@ -1,12 +1,6 @@
 import WidgetCard from './WidgetCard';
 import type { RecentDecision } from '@/lib/domain/homeDashboard';
-
-const DECISION_STYLES: Record<string, string> = {
-  ACCEPTED: 'text-risk-low',
-  PARTIALLY_ACCEPTED: 'text-risk-medium',
-  REJECTED: 'text-risk-high',
-  DEFERRED: 'text-atlas-text-tertiary',
-};
+import { DECISION_TONE, TONE_TEXT } from '@/lib/theme/tone';
 
 export default function RecentDecisionsWidget({
   decisions,
@@ -24,7 +18,7 @@ export default function RecentDecisionsWidget({
           {decisions.map((d, i) => (
             <li key={i} className="flex items-center justify-between text-sm">
               <span className="font-medium text-atlas-text">{d.symbol}</span>
-              <span className={`text-xs font-medium ${DECISION_STYLES[d.userDecision] ?? 'text-atlas-text-secondary'}`}>
+              <span className={`text-xs font-medium ${TONE_TEXT[DECISION_TONE[d.userDecision] ?? 'neutral']}`}>
                 {d.userDecision.replace(/_/g, ' ').toLowerCase()}
               </span>
             </li>

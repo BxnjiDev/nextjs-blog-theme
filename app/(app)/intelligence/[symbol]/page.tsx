@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import ConfidenceBadge from '@/components/ConfidenceBadge';
-import ActionBadge from '@/components/ActionBadge';
+import Badge from '@/components/ui/Badge';
+import { ACTION_TONE, ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
 import TrendLineChart from '@/components/charts/TrendLineChart';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import FadeInView from '@/components/motion/FadeInView';
@@ -109,7 +109,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
             <div className="atlas-glass rounded-xl p-4">
               <h2 className="mb-2 font-medium">Conviction</h2>
               <p className="text-3xl font-semibold">{thesis.convictionScore}/100</p>
-              <ConfidenceBadge score={Math.round(thesis.convictionScore / 10)} />
+              <Badge tone={scoreTone(thesis.convictionScore, 100)}>Confidence {Math.round(thesis.convictionScore / 10)}/10</Badge>
               <div className="mt-4">
                 <TrendLineChart data={chartData} domain={[0, 100]} />
               </div>
@@ -308,7 +308,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                       <tr key={r.id} className="border-t border-atlas-border-subtle">
                         <td className="py-2 pr-4">{r.generatedAt.toLocaleDateString()}</td>
                         <td className="py-2 pr-4">
-                          <ActionBadge action={r.action} />
+                          <Badge tone={ACTION_TONE[r.action] ?? 'neutral'}>{ACTION_LABEL[r.action] ?? r.action}</Badge>
                         </td>
                         <td className="py-2 pr-4">{r.confidenceScore}/10</td>
                         <td className="py-2 pr-4">{r.outcome?.return30d !== null && r.outcome?.return30d !== undefined ? `${r.outcome.return30d.toFixed(1)}%` : 'Pending'}</td>

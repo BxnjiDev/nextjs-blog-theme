@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import ActionBadge from '@/components/ActionBadge';
-import ConfidenceBadge from '@/components/ConfidenceBadge';
+import Badge from '@/components/ui/Badge';
+import { ACTION_TONE, ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
 import FadeInView from '@/components/motion/FadeInView';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 
@@ -67,8 +67,8 @@ export default async function HoldingsPage() {
                   {rec && (
                     <>
                       <div className="flex items-center gap-1.5">
-                        <ActionBadge action={rec.action} />
-                        <ConfidenceBadge score={rec.confidenceScore} />
+                        <Badge tone={ACTION_TONE[rec.action] ?? 'neutral'}>{ACTION_LABEL[rec.action] ?? rec.action}</Badge>
+                        <Badge tone={scoreTone(rec.confidenceScore, 10)}>Confidence {rec.confidenceScore}/10</Badge>
                       </div>
                       <Link
                         href={`/recommendations/${rec.id}`}

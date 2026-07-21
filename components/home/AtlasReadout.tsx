@@ -2,24 +2,11 @@
 
 import Link from 'next/link';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import AtlasCore, { type AtlasCoreState } from '@/components/atlas-identity/AtlasCore';
+import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/format';
+import { atlasStateForScore } from '@/lib/theme/tone';
 import type { MarketStatus } from '@/lib/domain/marketHours';
-
-/**
- * Maps the portfolio health score onto the Atlas identity orb's state
- * vocabulary — the orb itself becomes the health indicator instead of
- * sitting next to a separate "Portfolio health" stat tile. `offline` (dim,
- * no glow) is deliberately used for "no reading yet" rather than any
- * brand-colored state, since there's nothing to report.
- */
-function healthState(score: number | null): AtlasCoreState {
-  if (score == null) return 'offline';
-  if (score >= 75) return 'ready';
-  if (score >= 45) return 'idle';
-  return 'attention';
-}
 
 /**
  * The Command Deck's left hero zone — one unified HUD-style reading rather
@@ -48,7 +35,7 @@ export default function AtlasReadout({
   syncStatus: { lastSyncedAt: Date | null; success: boolean | null };
 }) {
   const positive = dayChangePercent >= 0;
-  const state = healthState(healthScore);
+  const state = atlasStateForScore(healthScore);
 
   return (
     <div className="flex flex-col gap-6 sm:flex-row sm:items-center">

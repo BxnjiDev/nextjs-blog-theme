@@ -19,6 +19,8 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LockAtlasButton from '@/components/init/LockAtlasButton';
+import { MOTION } from '@/lib/motion/tokens';
+import { ICON_SIZE, ICON_STROKE } from '@/lib/ui/iconSize';
 
 const PRIMARY_LINKS = [
   { href: '/', label: 'Home', icon: Home },
@@ -90,7 +92,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
           <Link key={href} href={href} onClick={onNavigate} className="relative block">
             <motion.div
               whileHover={{ x: active ? 0 : 2 }}
-              transition={{ duration: 0.15 }}
+              transition={{ duration: MOTION.duration.micro }}
               className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
                 active ? 'text-atlas-text' : 'text-atlas-text-secondary hover:text-atlas-text'
               }`}
@@ -99,12 +101,12 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
                 <motion.div
                   layoutId="sidebar-active-pill"
                   className="absolute inset-0 rounded-lg border border-atlas-border bg-atlas-surface-raised"
-                  transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                  transition={{ type: 'spring', ...MOTION.spring.nav }}
                 />
               )}
               <Icon
-                size={16}
-                strokeWidth={1.75}
+                size={ICON_SIZE.md}
+                strokeWidth={ICON_STROKE}
                 className={`relative z-10 shrink-0 transition-colors ${
                   active ? 'text-atlas-accent-bright' : 'text-atlas-text-tertiary group-hover:text-atlas-text-secondary'
                 }`}
@@ -126,8 +128,8 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             More
             {hasActiveMoreChild && !moreOpen && <span className="h-1.5 w-1.5 rounded-full bg-atlas-accent-bright" aria-hidden="true" />}
           </span>
-          <motion.span animate={{ rotate: moreOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronDown size={14} />
+          <motion.span animate={{ rotate: moreOpen ? 180 : 0 }} transition={{ duration: MOTION.duration.hover }}>
+            <ChevronDown size={ICON_SIZE.sm} />
           </motion.span>
         </button>
         <AnimatePresence initial={false}>
@@ -136,7 +138,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: MOTION.duration.modal, ease: MOTION.ease.standard }}
               className="overflow-hidden"
             >
               <div className="space-y-2.5 pb-2 pt-1">
@@ -255,10 +257,10 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
           aria-expanded={mobileOpen}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-atlas-text-secondary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text"
         >
-          <Menu size={18} strokeWidth={1.75} />
+          <Menu size={ICON_SIZE.lg} strokeWidth={ICON_STROKE} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-atlas-accent text-[11px] font-bold text-white shadow-glow-accent">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-atlas-accent text-[11px] font-bold text-white shadow-glow-accent">
             A
           </div>
           <span className="text-sm font-semibold tracking-tight text-atlas-text">Atlas</span>
@@ -272,7 +274,7 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: MOTION.duration.hover }}
               onClick={() => setMobileOpen(false)}
               className="fixed inset-0 z-40 bg-black/60 md:hidden"
               aria-hidden="true"
@@ -285,12 +287,12 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
-              transition={{ type: 'spring', stiffness: 420, damping: 42 }}
+              transition={{ type: 'spring', ...MOTION.spring.drawer }}
               className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[80vw] flex-col border-r border-atlas-border bg-atlas-surface md:hidden"
             >
               <div className="flex items-center justify-between px-5 py-5">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-atlas-accent text-[11px] font-bold text-white shadow-glow-accent">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-atlas-accent text-[11px] font-bold text-white shadow-glow-accent">
                     A
                   </div>
                   <span className="text-sm font-semibold tracking-tight text-atlas-text">Atlas</span>
@@ -301,7 +303,7 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
                   aria-label="Close navigation"
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-atlas-text-secondary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text"
                 >
-                  <X size={18} strokeWidth={1.75} />
+                  <X size={ICON_SIZE.lg} strokeWidth={ICON_STROKE} />
                 </button>
               </div>
               <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
@@ -316,8 +318,8 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
-            className="flex h-6 w-6 items-center justify-center rounded-md bg-atlas-accent text-[11px] font-bold text-white shadow-glow-accent"
+            transition={{ duration: MOTION.duration.panel }}
+            className="flex h-6 w-6 items-center justify-center rounded-lg bg-atlas-accent text-[11px] font-bold text-white shadow-glow-accent"
           >
             A
           </motion.div>

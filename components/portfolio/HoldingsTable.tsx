@@ -5,9 +5,14 @@ import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ArrowUpDown, ArrowUp, ArrowDown, ChevronRight, Rows3, Rows2 } from 'lucide-react';
 import { formatCurrency, formatPercent } from '@/lib/format';
-import DataQualityBadge from '../DataQualityBadge';
+import Badge from '../ui/Badge';
+import EmptyState from '../ui/EmptyState';
+import SegmentedControl from '../ui/SegmentedControl';
+import { quoteQualityLabel } from '@/lib/theme/tone';
 import { MOTION } from '@/lib/motion/tokens';
 import type { HoldingView } from '@/lib/domain/portfolio';
+
+type Density = 'comfortable' | 'compact';
 
 type SortKey = 'symbol' | 'changePercent' | 'marketValue' | 'allocation' | 'unrealizedPnlPercent' | 'convictionScore';
 type SortDirection = 'asc' | 'desc';
@@ -61,7 +66,8 @@ export default function HoldingsTable({
   const reduceMotion = useReducedMotion();
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'marketValue', direction: 'desc' });
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [compact, setCompact] = useState(false);
+  const [density, setDensity] = useState<Density>('comfortable');
+  const compact = density === 'compact';
 
   const visible = filterSymbol ? holdings.filter((h) => h.symbol === filterSymbol) : holdings;
 
@@ -80,7 +86,7 @@ export default function HoldingsTable({
   }
 
   if (holdings.length === 0) {
-    return <p className="py-8 text-sm text-atlas-text-tertiary">No holdings yet — cash only.</p>;
+    return <EmptyState compact className="py-8">No holdings yet — cash only.</EmptyState>;
   }
 
   const rowPad = compact ? 'py-2' : 'py-3';
@@ -98,15 +104,14 @@ export default function HoldingsTable({
         ) : (
           <p className="text-xs text-atlas-text-tertiary">{holdings.length} holding{holdings.length === 1 ? '' : 's'}</p>
         )}
-        <button
-          type="button"
-          onClick={() => setCompact((v) => !v)}
-          aria-pressed={compact}
-          className="atlas-press flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-atlas-text-tertiary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text-secondary"
-        >
-          {compact ? <Rows3 size={13} strokeWidth={1.75} aria-hidden="true" /> : <Rows2 size={13} strokeWidth={1.75} aria-hidden="true" />}
-          {compact ? 'Comfortable' : 'Compact'}
-        </button>
+        <SegmentedControl
+          value={density}
+          onChange={setDensity}
+          options={[
+            { value: 'comfortable', label: 'Comfortable', icon: Rows3 },
+            { value: 'compact', label: 'Compact', icon: Rows2 },
+          ]}
+        />
       </div>
 
       {/* Desktop table */}
@@ -141,6 +146,7 @@ export default function HoldingsTable({
           {sorted.map((h, i) => {
             const expanded = expandedId === h.id;
             const allocation = totalValue > 0 ? (h.marketValue / totalValue) * 100 : 0;
+            const quality = quoteQualityLabel(h.quoteQuality, h.quoteAsOf);
             return (
               <Fragment key={h.id}>
                 <motion.tr
@@ -174,7 +180,9 @@ export default function HoldingsTable({
                   </td>
                   <td className="py-3 pr-4 text-right font-mono text-atlas-text-secondary">{h.convictionScore != null ? `${h.convictionScore}/100` : '—'}</td>
                   <td className={rowPad}>
-                    <DataQualityBadge quality={h.quoteQuality} asOf={h.quoteAsOf} />
+                    <Badge tone={quality.tone} title={`As of ${h.quoteAsOf.toLocaleString()}`}>
+                      {quality.label}
+                    </Badge>
                   </td>
                 </motion.tr>
                 <AnimatePresence initial={false}>

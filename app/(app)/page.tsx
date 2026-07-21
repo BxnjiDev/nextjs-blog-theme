@@ -78,6 +78,7 @@ export default async function HomePage() {
       <AutoRefresh />
 
       <FadeInView>
+        <h1 className="sr-only">Home</h1>
         <p className="text-sm text-atlas-text-secondary">{data.greeting}</p>
       </FadeInView>
 

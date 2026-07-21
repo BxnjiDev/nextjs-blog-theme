@@ -5,6 +5,11 @@ import { getGlobalStatus } from '@/lib/domain/globalStatus';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { getSchedulerStatus, JOB_REGISTRY } from '@/lib/domain/scheduler';
 import FadeInView from '@/components/motion/FadeInView';
+import Badge from '@/components/ui/Badge';
+import SectionHeading from '@/components/ui/SectionHeading';
+import StatStrip, { Stat } from '@/components/ui/Stat';
+import EmptyState from '@/components/ui/EmptyState';
+import { STALENESS_LABEL, RUN_STATUS_TONE, MATCH_STATUS_TONE } from '@/lib/theme/tone';
 import { rerunJob } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -24,39 +29,8 @@ async function checkEdgarReachable(): Promise<{ ok: boolean; detail: string }> {
 }
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-        ok ? 'bg-risk-low/10 text-risk-low' : 'bg-atlas-surface-raised text-atlas-text-tertiary'
-      }`}
-    >
-      {label}
-    </span>
-  );
+  return <Badge tone={ok ? 'positive' : 'muted'}>{label}</Badge>;
 }
-
-const STALENESS_LABEL: Record<string, string> = {
-  fresh: 'Fresh',
-  aging: 'Aging',
-  stale: 'Stale',
-  unknown: 'No data yet',
-};
-
-const RUN_STATUS_STYLES: Record<string, string> = {
-  SUCCESS: 'bg-risk-low/10 text-risk-low',
-  WARNING: 'bg-risk-medium/10 text-risk-medium',
-  FAILURE: 'bg-risk-high/10 text-risk-high',
-  RUNNING: 'bg-atlas-steel/10 text-atlas-steel',
-  SKIPPED: 'bg-atlas-surface-raised text-atlas-text-tertiary',
-};
-
-const MATCH_STATUS_STYLES: Record<string, string> = {
-  UNMATCHED: 'bg-atlas-surface-raised text-atlas-text-tertiary',
-  AMOUNT_MISMATCH: 'bg-risk-high/10 text-risk-high',
-  QUANTITY_MISMATCH: 'bg-risk-high/10 text-risk-high',
-  PRICE_MISMATCH: 'bg-risk-high/10 text-risk-high',
-  TIMING_MISMATCH: 'bg-risk-medium/10 text-risk-medium',
-};
 
 /** Renders the shared getDataFreshnessSnapshot() fields for one provider —
  * last updated, staleness, and (once lib/integrations/retry.ts has logged
@@ -181,36 +155,31 @@ export default async function ConnectionsPage() {
       </FadeInView>
 
       <FadeInView delay={0.03}>
-        <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Operating mode</p>
-            <p className={`mt-1 font-mono text-lg ${globalStatus.mode === 'live-evaluation' ? 'text-atlas-warning' : 'text-atlas-text'}`}>
-              {globalStatus.mode}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Last Robinhood sync</p>
-            <p className="mt-1 font-mono text-lg text-atlas-text">
-              {globalStatus.robinhoodSync.lastSyncedAt
+        <StatStrip>
+          <Stat label="Operating mode" value={globalStatus.mode} tone={globalStatus.mode === 'live-evaluation' ? 'warning' : undefined} />
+          <Stat
+            label="Last Robinhood sync"
+            value={
+              globalStatus.robinhoodSync.lastSyncedAt
                 ? `${globalStatus.robinhoodSync.success ? 'ok' : 'rejected'} · ${globalStatus.robinhoodSync.ageHours!.toFixed(1)}h ago`
-                : 'Never synced'}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Last complete pipeline run</p>
-            <p className="mt-1 font-mono text-lg text-atlas-text">
-              {globalStatus.lastFullIntelligenceRunAt ? globalStatus.lastFullIntelligenceRunAt.toLocaleString() : 'Never run'}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Running / failed jobs</p>
-            <p className="mt-1 font-mono text-lg">
-              <span className={runningJobs.length > 0 ? 'text-atlas-steel' : 'text-atlas-text'}>{runningJobs.length} running</span>
-              <span className="text-atlas-text-tertiary"> · </span>
-              <span className={failedJobs.length > 0 ? 'text-risk-high' : 'text-atlas-text'}>{failedJobs.length} failed</span>
-            </p>
-          </div>
-        </div>
+                : 'Never synced'
+            }
+          />
+          <Stat
+            label="Last complete pipeline run"
+            value={globalStatus.lastFullIntelligenceRunAt ? globalStatus.lastFullIntelligenceRunAt.toLocaleString() : 'Never run'}
+          />
+          <Stat
+            label="Running / failed jobs"
+            value={
+              <>
+                <span className={runningJobs.length > 0 ? 'text-atlas-steel' : 'text-atlas-text'}>{runningJobs.length} running</span>
+                <span className="text-atlas-text-tertiary"> · </span>
+                <span className={failedJobs.length > 0 ? 'text-risk-high' : 'text-atlas-text'}>{failedJobs.length} failed</span>
+              </>
+            }
+          />
+        </StatStrip>
         {globalStatus.mode === 'live-evaluation' && (
           <p className="mt-3 text-xs text-atlas-warning">
             Live-evaluation mode — recommendations are blocked rather than generated from mock market data,
@@ -220,13 +189,17 @@ export default async function ConnectionsPage() {
       </FadeInView>
 
       <FadeInView delay={0.06}>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Scheduled jobs</h2>
-          <p className="text-xs text-atlas-text-tertiary">
-            Reruns here are always safe — every job is read/analyze/record only, never able to submit a trade (see{' '}
-            <code className="rounded bg-atlas-surface-raised px-1">lib/domain/executionBoundary.test.ts</code>).
-          </p>
-        </div>
+        <SectionHeading
+          className="mb-3"
+          action={
+            <p className="text-xs text-atlas-text-tertiary">
+              Reruns here are always safe — every job is read/analyze/record only, never able to submit a trade (see{' '}
+              <code className="rounded bg-atlas-surface-raised px-1">lib/domain/executionBoundary.test.ts</code>).
+            </p>
+          }
+        >
+          Scheduled jobs
+        </SectionHeading>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -246,9 +219,9 @@ export default async function ConnectionsPage() {
                   <td className="py-2 pr-4 font-medium">{s.label}</td>
                   <td className="py-2 pr-4 text-xs text-atlas-text-tertiary">{s.enabled ? 'yes' : 'disabled'}</td>
                   <td className="py-2 pr-4">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RUN_STATUS_STYLES[s.locked ? 'RUNNING' : s.lastRun?.status ?? 'SKIPPED']}`}>
+                    <Badge tone={RUN_STATUS_TONE[s.locked ? 'RUNNING' : (s.lastRun?.status ?? 'SKIPPED')]}>
                       {s.locked ? 'RUNNING' : (s.lastRun?.status ?? 'never run')}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="py-2 pr-4 text-xs text-atlas-text-tertiary">
                     {s.lastRun ? `${s.lastRun.startedAt.toLocaleString()} (${s.lastRun.trigger})` : '—'}
@@ -310,12 +283,16 @@ export default async function ConnectionsPage() {
 
       {unresolvedExecutions.length > 0 && (
         <FadeInView delay={0.12}>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Unmatched manual executions &amp; reconciliation warnings</h2>
-            <a href="/executions" className="text-xs text-atlas-accent-bright underline">
-              Record / view all →
-            </a>
-          </div>
+          <SectionHeading
+            className="mb-3"
+            action={
+              <a href="/executions" className="text-xs text-atlas-accent-bright underline">
+                Record / view all →
+              </a>
+            }
+          >
+            Unmatched manual executions &amp; reconciliation warnings
+          </SectionHeading>
           <ul className="space-y-2 text-xs">
             {unresolvedExecutions.map((e) => (
               <li key={e.id} className="flex items-start justify-between gap-3 border-b border-atlas-border-subtle/60 pb-2">
@@ -325,9 +302,9 @@ export default async function ConnectionsPage() {
                   </span>
                   <p className="mt-1 text-atlas-text-tertiary">{e.reconciliationNote ?? 'Awaiting next sync.'}</p>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 font-medium ${MATCH_STATUS_STYLES[e.matchStatus] ?? ''}`}>
+                <Badge tone={MATCH_STATUS_TONE[e.matchStatus] ?? 'muted'} className="shrink-0">
                   {e.matchStatus.replace(/_/g, ' ')}
-                </span>
+                </Badge>
               </li>
             ))}
           </ul>
@@ -335,7 +312,7 @@ export default async function ConnectionsPage() {
       )}
 
       <FadeInView delay={0.15}>
-        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">System health</h2>
+        <SectionHeading className="mb-2">System health</SectionHeading>
         <div className="grid gap-x-8 sm:grid-cols-2">
           <HealthRow label="Last portfolio refresh" ok={Boolean(latestSnapshot)} detail={latestSnapshot ? latestSnapshot.date.toLocaleDateString() : 'Never run'} />
           <HealthRow label="Last recommendation generated" ok={Boolean(latestRecommendation)} detail={latestRecommendation ? latestRecommendation.generatedAt.toLocaleString() : 'Never run'} />
@@ -361,7 +338,7 @@ export default async function ConnectionsPage() {
       </FadeInView>
 
       <FadeInView delay={0.18}>
-        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Live-evaluation account sync</h2>
+        <SectionHeading className="mb-2">Live-evaluation account sync</SectionHeading>
         <div className="grid gap-x-8 sm:grid-cols-2">
           <HealthRow label="Evaluation account connected" ok={Boolean(evaluationAccount)} detail={evaluationAccount ? evaluationAccount.externalId : 'Never synced'} />
           <HealthRow
@@ -406,7 +383,7 @@ export default async function ConnectionsPage() {
       </FadeInView>
 
       <FadeInView delay={0.2}>
-        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Providers</h2>
+        <SectionHeading className="mb-3">Providers</SectionHeading>
         <div className="space-y-4">
           <div className="atlas-glass rounded-xl p-4">
             <div className="flex items-center justify-between">

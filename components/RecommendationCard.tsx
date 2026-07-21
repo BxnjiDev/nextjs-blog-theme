@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import ConfidenceMeter from './intelligence/ConfidenceMeter';
+import Badge from './ui/Badge';
+import Meter from './ui/Meter';
+import { ACTION_TONE, ACTION_LABEL, GATE_STATUS_TONE } from '@/lib/theme/tone';
 
 export interface RecommendationCardData {
   id: string;
@@ -14,28 +16,6 @@ export interface RecommendationCardData {
   convictionScore?: number | null;
   dataQualityStatus?: string | null;
 }
-
-const DIRECTIVE_STYLES: Record<string, string> = {
-  BUY_MORE: 'border-atlas-emerald/30 text-atlas-emerald',
-  HOLD: 'border-atlas-border text-atlas-text-secondary',
-  REDUCE: 'border-atlas-warning/30 text-atlas-warning',
-  SELL: 'border-risk-high/30 text-risk-high',
-  WATCH: 'border-atlas-steel/30 text-atlas-steel',
-};
-
-const DIRECTIVE_LABELS: Record<string, string> = {
-  BUY_MORE: 'Buy more',
-  HOLD: 'Hold',
-  REDUCE: 'Reduce',
-  SELL: 'Sell',
-  WATCH: 'Watch closely',
-};
-
-const DATA_QUALITY_STYLES: Record<string, string> = {
-  PASS: 'text-risk-low',
-  PASS_WITH_WARNINGS: 'text-risk-medium',
-  BLOCKED: 'text-risk-high',
-};
 
 /**
  * The recommendation-as-mission-briefing card used on Home, in Atlas Chat
@@ -52,16 +32,14 @@ export default function RecommendationCard({ data, compact = false }: { data: Re
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
         <span className="text-xl font-semibold tracking-tight text-atlas-text">{data.symbol}</span>
-        <span
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${DIRECTIVE_STYLES[data.action] ?? DIRECTIVE_STYLES.HOLD}`}
-        >
-          {DIRECTIVE_LABELS[data.action] ?? data.action}
-        </span>
+        <Badge tone={ACTION_TONE[data.action] ?? 'neutral'} variant="outline" className="shrink-0">
+          {ACTION_LABEL[data.action] ?? data.action}
+        </Badge>
       </div>
 
       {!compact && <p className="mb-3 line-clamp-2 text-sm leading-relaxed text-atlas-text-secondary">{data.thesis}</p>}
 
-      <ConfidenceMeter score={data.confidenceScore} max={10} label="Confidence" />
+      <Meter score={data.confidenceScore} max={10} label="Confidence" />
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-atlas-text-tertiary">
         {typeof data.convictionScore === 'number' && <span className="font-mono">Conviction {data.convictionScore}/100</span>}
@@ -72,9 +50,7 @@ export default function RecommendationCard({ data, compact = false }: { data: Re
           </span>
         )}
         {data.dataQualityStatus && (
-          <span className={`font-medium ${DATA_QUALITY_STYLES[data.dataQualityStatus] ?? ''}`}>
-            {data.dataQualityStatus.replace(/_/g, ' ')}
-          </span>
+          <Badge tone={GATE_STATUS_TONE[data.dataQualityStatus] ?? 'muted'}>{data.dataQualityStatus.replace(/_/g, ' ')}</Badge>
         )}
       </div>
     </Link>

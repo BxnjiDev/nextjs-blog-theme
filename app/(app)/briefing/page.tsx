@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { formatCurrency, formatPercent } from '@/lib/format';
-import ActionBadge from '@/components/ActionBadge';
+import Badge from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import SectionHeading from '@/components/ui/SectionHeading';
+import StatStrip, { Stat } from '@/components/ui/Stat';
+import { ACTION_TONE, ACTION_LABEL } from '@/lib/theme/tone';
 import FadeInView from '@/components/motion/FadeInView';
 import { normalizeBriefingPortfolioSummary, normalizeBriefingMarketRecap, type ReturnMetricShape } from '@/lib/domain/legacyNormalization';
 
@@ -33,7 +37,7 @@ export default async function BriefingPage() {
   const briefing = await prisma.briefing.findFirst({ orderBy: { date: 'desc' } });
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-14">
       <FadeInView>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Briefing</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-atlas-text">Daily briefing</h1>
@@ -49,10 +53,10 @@ export default async function BriefingPage() {
       </FadeInView>
 
       {!briefing ? (
-        <p className="text-sm text-atlas-text-tertiary">
+        <EmptyState>
           No briefing has been generated yet — run the briefing job (
           <code className="rounded bg-atlas-surface-raised px-1">/api/jobs/briefing</code>).
-        </p>
+        </EmptyState>
       ) : (
         (() => {
           const summary = normalizeBriefingPortfolioSummary(briefing.portfolioSummary);
@@ -65,63 +69,69 @@ export default async function BriefingPage() {
                   {briefing.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
 
-                <div className="mt-4 flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Total value</p>
-                    <p className="mt-1 font-mono text-lg text-atlas-text">{summary.totalValue !== null ? formatCurrency(summary.totalValue) : 'n/a'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Day change</p>
-                    <p className={`mt-1 font-mono text-lg ${(summary.dayChangePercent ?? 0) >= 0 ? 'text-risk-low' : 'text-risk-high'}`}>
-                      {summary.dayChangeValue !== null ? formatCurrency(summary.dayChangeValue) : 'n/a'}
-                      {summary.dayChangePercent !== null && <span className="ml-1 text-xs">({formatPercent(summary.dayChangePercent)})</span>}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Largest winner</p>
-                    <p className="mt-1 font-mono text-lg text-risk-low">
-                      {summary.largestWinner?.symbol ?? 'n/a'}
-                      {summary.largestWinner && <span className="ml-1 text-xs">{formatPercent(summary.largestWinner.changePercent)}</span>}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Largest loser</p>
-                    <p className="mt-1 font-mono text-lg text-risk-high">
-                      {summary.largestLoser?.symbol ?? 'n/a'}
-                      {summary.largestLoser && <span className="ml-1 text-xs">{formatPercent(summary.largestLoser.changePercent)}</span>}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Cash available</p>
-                    <p className="mt-1 font-mono text-lg text-atlas-text">{summary.cashBalance !== null ? formatCurrency(summary.cashBalance) : 'n/a'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Capital deployed</p>
-                    <p className="mt-1 font-mono text-lg text-atlas-text">{summary.capitalDeployed !== null ? formatCurrency(summary.capitalDeployed) : 'n/a'}</p>
-                  </div>
-                  {summary.changesSinceYesterday && (
-                    <>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Since yesterday</p>
-                        <p className={`mt-1 font-mono text-lg ${(summary.changesSinceYesterday.totalValueDelta ?? 0) >= 0 ? 'text-risk-low' : 'text-risk-high'}`}>
-                          {summary.changesSinceYesterday.totalValueDelta !== null ? formatCurrency(summary.changesSinceYesterday.totalValueDelta) : 'n/a'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Health since yesterday</p>
-                        <p className={`mt-1 font-mono text-lg ${(summary.changesSinceYesterday.healthScoreDelta ?? 0) >= 0 ? 'text-risk-low' : 'text-risk-high'}`}>
-                          {summary.changesSinceYesterday.healthScoreDelta !== null
-                            ? `${summary.changesSinceYesterday.healthScoreDelta >= 0 ? '+' : ''}${summary.changesSinceYesterday.healthScoreDelta}`
-                            : 'n/a'}
-                        </p>
-                      </div>
-                    </>
-                  )}
+                <div className="mt-4">
+                  <StatStrip>
+                    <Stat label="Total value" value={summary.totalValue !== null ? formatCurrency(summary.totalValue) : 'n/a'} />
+                    <Stat
+                      label="Day change"
+                      tone={(summary.dayChangePercent ?? 0) >= 0 ? 'positive' : 'negative'}
+                      value={
+                        <>
+                          {summary.dayChangeValue !== null ? formatCurrency(summary.dayChangeValue) : 'n/a'}
+                          {summary.dayChangePercent !== null && <span className="ml-1 text-xs">({formatPercent(summary.dayChangePercent)})</span>}
+                        </>
+                      }
+                    />
+                    <Stat
+                      label="Largest winner"
+                      tone="positive"
+                      value={
+                        <>
+                          {summary.largestWinner?.symbol ?? 'n/a'}
+                          {summary.largestWinner && <span className="ml-1 text-xs">{formatPercent(summary.largestWinner.changePercent)}</span>}
+                        </>
+                      }
+                    />
+                    <Stat
+                      label="Largest loser"
+                      tone="negative"
+                      value={
+                        <>
+                          {summary.largestLoser?.symbol ?? 'n/a'}
+                          {summary.largestLoser && <span className="ml-1 text-xs">{formatPercent(summary.largestLoser.changePercent)}</span>}
+                        </>
+                      }
+                    />
+                    <Stat label="Cash available" value={summary.cashBalance !== null ? formatCurrency(summary.cashBalance) : 'n/a'} />
+                    <Stat label="Capital deployed" value={summary.capitalDeployed !== null ? formatCurrency(summary.capitalDeployed) : 'n/a'} />
+                    {summary.changesSinceYesterday && (
+                      <>
+                        <Stat
+                          label="Since yesterday"
+                          tone={(summary.changesSinceYesterday.totalValueDelta ?? 0) >= 0 ? 'positive' : 'negative'}
+                          value={
+                            summary.changesSinceYesterday.totalValueDelta !== null
+                              ? formatCurrency(summary.changesSinceYesterday.totalValueDelta)
+                              : 'n/a'
+                          }
+                        />
+                        <Stat
+                          label="Health since yesterday"
+                          tone={(summary.changesSinceYesterday.healthScoreDelta ?? 0) >= 0 ? 'positive' : 'negative'}
+                          value={
+                            summary.changesSinceYesterday.healthScoreDelta !== null
+                              ? `${summary.changesSinceYesterday.healthScoreDelta >= 0 ? '+' : ''}${summary.changesSinceYesterday.healthScoreDelta}`
+                              : 'n/a'
+                          }
+                        />
+                      </>
+                    )}
+                  </StatStrip>
                 </div>
               </FadeInView>
 
               <FadeInView delay={0.08}>
-                <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Performance vs. SPY</h2>
+                <SectionHeading className="mb-3">Performance vs. SPY</SectionHeading>
                 <div className="max-w-md space-y-1.5">
                   <ReturnRow label="Daily" metric={summary.performance.daily} />
                   <ReturnRow label="Weekly" metric={summary.performance.weekly} />
@@ -132,35 +142,43 @@ export default async function BriefingPage() {
               <FadeInView delay={0.1}>
                 <div className="grid gap-8 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
                   <div>
-                    <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">
-                      Material risks{' '}
-                      <Link href="/risk" className="normal-case text-atlas-text-tertiary underline">
-                        view detail
-                      </Link>
-                    </h2>
+                    <SectionHeading
+                      className="mb-2"
+                      action={
+                        <Link href="/risk" className="text-xs normal-case text-atlas-text-tertiary underline">
+                          view detail
+                        </Link>
+                      }
+                    >
+                      Material risks
+                    </SectionHeading>
                     {summary.materialRisks ? (
                       <>
                         <p className="font-mono text-2xl text-atlas-text">{summary.materialRisks.overallScore}/100</p>
                         {summary.materialRisks.notes && <p className="mt-1 text-sm text-atlas-text-secondary">{summary.materialRisks.notes}</p>}
                       </>
                     ) : (
-                      <p className="text-sm text-atlas-text-tertiary">No risk assessment on record yet.</p>
+                      <EmptyState compact>No risk assessment on record yet.</EmptyState>
                     )}
                   </div>
                   <div>
-                    <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">
-                      Portfolio health{' '}
-                      <Link href="/health" className="normal-case text-atlas-text-tertiary underline">
-                        view detail
-                      </Link>
-                    </h2>
+                    <SectionHeading
+                      className="mb-2"
+                      action={
+                        <Link href="/health" className="text-xs normal-case text-atlas-text-tertiary underline">
+                          view detail
+                        </Link>
+                      }
+                    >
+                      Portfolio health
+                    </SectionHeading>
                     {summary.portfolioHealth ? (
                       <>
                         <p className="font-mono text-2xl text-atlas-text">{summary.portfolioHealth.overallScore}/100</p>
                         {summary.portfolioHealth.topConcerns?.[0] && <p className="mt-1 text-sm text-atlas-text-secondary">{summary.portfolioHealth.topConcerns[0]}</p>}
                       </>
                     ) : (
-                      <p className="text-sm text-atlas-text-tertiary">No health assessment on record yet.</p>
+                      <EmptyState compact>No health assessment on record yet.</EmptyState>
                     )}
                   </div>
                 </div>
@@ -168,15 +186,19 @@ export default async function BriefingPage() {
 
               <FadeInView delay={0.12}>
                 <div className="border-t border-atlas-border-subtle pt-8">
-                  <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Recommended actions</h2>
-                  {summary.recommendedActions.length === 0 && <p className="text-sm text-atlas-text-tertiary">No holdings to recommend against yet.</p>}
+                  <SectionHeading className="mb-3">Recommended actions</SectionHeading>
+                  {summary.recommendedActions.length === 0 && <EmptyState compact>No holdings to recommend against yet.</EmptyState>}
                   <div className="space-y-2">
                     {summary.recommendedActions.map((r) => (
                       <div key={r.symbol} className="flex items-center justify-between text-sm">
                         <Link href={`/intelligence/${r.symbol}`} className="font-medium text-atlas-text hover:text-atlas-accent-bright">
                           {r.symbol}
                         </Link>
-                        {r.action ? <ActionBadge action={r.action} /> : <span className="text-atlas-text-tertiary">No recommendation yet</span>}
+                        {r.action ? (
+                          <Badge tone={ACTION_TONE[r.action] ?? 'neutral'}>{ACTION_LABEL[r.action] ?? r.action}</Badge>
+                        ) : (
+                          <span className="text-atlas-text-tertiary">No recommendation yet</span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -185,9 +207,9 @@ export default async function BriefingPage() {
 
               <FadeInView delay={0.14}>
                 <div className="border-t border-atlas-border-subtle pt-8">
-                  <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Portfolio news</h2>
+                  <SectionHeading className="mb-3">Portfolio news</SectionHeading>
                   {recap.portfolioNews.length === 0 ? (
-                    <p className="text-sm text-atlas-text-tertiary">No meaningful news in the last 48 hours.</p>
+                    <EmptyState compact>No meaningful news in the last 48 hours.</EmptyState>
                   ) : (
                     <ul className="space-y-4">
                       {recap.portfolioNews.map((n, i) => (
@@ -208,8 +230,8 @@ export default async function BriefingPage() {
 
               <FadeInView delay={0.16}>
                 <div className="border-t border-atlas-border-subtle pt-8">
-                  <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Upcoming earnings &amp; events</h2>
-                  {recap.upcomingEvents.length === 0 && <p className="text-sm text-atlas-text-tertiary">No holdings to track events for yet.</p>}
+                  <SectionHeading className="mb-3">Upcoming earnings &amp; events</SectionHeading>
+                  {recap.upcomingEvents.length === 0 && <EmptyState compact>No holdings to track events for yet.</EmptyState>}
                   <div className="space-y-2 text-sm">
                     {recap.upcomingEvents.map((e) => (
                       <div key={e.symbol} className="flex items-center justify-between">
@@ -234,7 +256,7 @@ export default async function BriefingPage() {
                   <div className="border-l-2 border-atlas-emerald/40 pl-4">
                     <h2 className="mb-2 text-sm font-medium text-atlas-emerald">What Atlas would do today</h2>
                     {summary.whatAtlasWouldDoToday.length === 0 ? (
-                      <p className="text-sm text-atlas-text-tertiary">Nothing with enough conviction to act on today.</p>
+                      <EmptyState compact>Nothing with enough conviction to act on today.</EmptyState>
                     ) : (
                       <ul className="list-inside list-disc space-y-1 text-sm text-atlas-text-secondary">
                         {summary.whatAtlasWouldDoToday.map((t, i) => (
@@ -246,7 +268,7 @@ export default async function BriefingPage() {
                   <div className="border-l-2 border-atlas-border pl-4">
                     <h2 className="mb-2 text-sm font-medium text-atlas-text-secondary">What Atlas would avoid today</h2>
                     {summary.whatAtlasWouldAvoidToday.length === 0 ? (
-                      <p className="text-sm text-atlas-text-tertiary">No fresh low-conviction calls today.</p>
+                      <EmptyState compact>No fresh low-conviction calls today.</EmptyState>
                     ) : (
                       <ul className="list-inside list-disc space-y-1 text-sm text-atlas-text-secondary">
                         {summary.whatAtlasWouldAvoidToday.map((t, i) => (
@@ -261,12 +283,16 @@ export default async function BriefingPage() {
               {summary.biggestOpportunities.length > 0 && (
                 <FadeInView delay={0.2}>
                   <div className="border-t border-atlas-border-subtle pt-8">
-                    <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">
-                      Biggest opportunities{' '}
-                      <Link href="/opportunities" className="normal-case text-atlas-text-tertiary underline">
-                        view all
-                      </Link>
-                    </h2>
+                    <SectionHeading
+                      className="mb-3"
+                      action={
+                        <Link href="/opportunities" className="text-xs normal-case text-atlas-text-tertiary underline">
+                          view all
+                        </Link>
+                      }
+                    >
+                      Biggest opportunities
+                    </SectionHeading>
                     <div className="space-y-2 text-sm">
                       {summary.biggestOpportunities.map((o) => (
                         <div key={o.symbol} className="flex items-center justify-between">
@@ -286,7 +312,7 @@ export default async function BriefingPage() {
               {summary.thesisChangesSinceYesterday.length > 0 && (
                 <FadeInView delay={0.22}>
                   <div className="border-t border-atlas-border-subtle pt-8">
-                    <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Thesis changes since yesterday</h2>
+                    <SectionHeading className="mb-3">Thesis changes since yesterday</SectionHeading>
                     <ul className="space-y-3 text-sm">
                       {summary.thesisChangesSinceYesterday.map((c, i) => (
                         <li key={i}>
@@ -304,7 +330,7 @@ export default async function BriefingPage() {
 
               <FadeInView delay={0.24}>
                 <div className="border-t border-atlas-border-subtle pt-8">
-                  <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Notes</h2>
+                  <SectionHeading className="mb-2">Notes</SectionHeading>
                   <ul className="list-inside list-disc space-y-1 text-xs text-atlas-text-tertiary">
                     {recap.notes.map((n, i) => (
                       <li key={i}>{n}</li>

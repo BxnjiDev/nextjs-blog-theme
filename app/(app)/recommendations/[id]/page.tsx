@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import FreshnessStrip from '@/components/FreshnessStrip';
-import ConfidenceMeter from '@/components/intelligence/ConfidenceMeter';
+import Meter from '@/components/ui/Meter';
 import FadeInView from '@/components/motion/FadeInView';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 import { normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
@@ -145,7 +145,7 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
           <p className="mt-1 font-mono text-lg text-atlas-text">{conviction ? `${conviction.overallScore}/100` : 'No data'}</p>
         </div>
         <div className="min-w-[160px]">
-          <ConfidenceMeter score={recommendation.confidenceScore} max={10} label="Confidence" />
+          <Meter score={recommendation.confidenceScore} max={10} label="Confidence" />
         </div>
         <div>
           <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Confidence calibration</p>
