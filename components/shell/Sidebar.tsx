@@ -16,7 +16,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LockAtlasButton from '@/components/init/LockAtlasButton';
 
@@ -196,6 +196,8 @@ function AccountFooter({ userEmail }: { userEmail: string }) {
 export default function Sidebar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const openButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
 
   // A route change is the one unambiguous signal that navigation succeeded,
   // so the mobile drawer closes itself rather than requiring a second tap.
@@ -203,13 +205,41 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Focus trap + restoration: while the drawer is a role="dialog", focus
+  // must stay inside it (Tab/Shift+Tab wrap at its edges) and Escape or a
+  // successful close must hand focus back to the hamburger button that
+  // opened it — otherwise a keyboard/screen-reader user is dropped back
+  // at the top of the document with no sense of where they are.
   useEffect(() => {
     if (!mobileOpen) return;
+    const openButton = openButtonRef.current;
+    const drawer = drawerRef.current;
+    const focusables = drawer?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
+    );
+    focusables?.[0]?.focus();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMobileOpen(false);
+      if (e.key === 'Escape') {
+        setMobileOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab' || !focusables || focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      openButton?.focus();
+    };
   }, [mobileOpen]);
 
   return (
@@ -218,6 +248,7 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
           the only way to reach navigation on a phone-width viewport. */}
       <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-atlas-border bg-atlas-surface/80 px-4 backdrop-blur-xl md:hidden">
         <button
+          ref={openButtonRef}
           type="button"
           onClick={() => setMobileOpen(true)}
           aria-label="Open navigation"
@@ -247,6 +278,7 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
               aria-hidden="true"
             />
             <motion.aside
+              ref={drawerRef}
               role="dialog"
               aria-modal="true"
               aria-label="Navigation"

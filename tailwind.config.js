@@ -40,7 +40,7 @@ module.exports = {
           warning: '#f0a020',
           text: '#f5f5f6', // cool near-white
           'text-secondary': '#a7a8b0', // restrained silver
-          'text-tertiary': '#75767f', // accessible graphite-gray
+          'text-tertiary': '#7d7e87', // accessible graphite-gray — tuned to clear 4.5:1 on canvas (WCAG AA)
         },
       },
       fontFamily: {
