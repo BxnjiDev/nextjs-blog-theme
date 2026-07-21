@@ -30,6 +30,8 @@ function view(overrides: Partial<HoldingView>): HoldingView {
     unrealizedPnlPercent: 0,
     quoteAsOf: new Date(),
     quoteQuality: 'mock',
+    convictionScore: null,
+    thesisLastReviewedAt: null,
     ...overrides,
   };
 }

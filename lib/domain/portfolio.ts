@@ -16,6 +16,12 @@ export interface HoldingView {
   unrealizedPnlPercent: number;
   quoteAsOf: Date;
   quoteQuality: DataQuality;
+  /** From the existing Holding -> Thesis 1:1 relation — null when no
+   * thesis has been generated yet for this holding (e.g. right after a
+   * fresh sync, before the daily thesis job has run). Mirrors the latest
+   * ConvictionAssessment.overallScore; never recomputed here. */
+  convictionScore: number | null;
+  thesisLastReviewedAt: Date | null;
 }
 
 export interface PortfolioOverview {
@@ -64,7 +70,7 @@ export async function getPortfolioOverview(): Promise<PortfolioOverview | null> 
 
   const account = await prisma.account.findUnique({
     where: { id: accountId },
-    include: { holdings: true },
+    include: { holdings: { include: { thesis: { select: { convictionScore: true, lastReviewedAt: true } } } } },
   });
   if (!account) return null;
 
@@ -93,6 +99,8 @@ export async function getPortfolioOverview(): Promise<PortfolioOverview | null> 
       unrealizedPnlPercent: costBasisValue === 0 ? 0 : (marketValue - costBasisValue) / costBasisValue,
       quoteAsOf: quote?.asOf ?? h.updatedAt,
       quoteQuality: quote?.quality ?? 'mock',
+      convictionScore: h.thesis?.convictionScore ?? null,
+      thesisLastReviewedAt: h.thesis?.lastReviewedAt ?? null,
     };
   });
 

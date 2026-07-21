@@ -8,11 +8,23 @@ export interface ReturnMetric {
   note?: string;
 }
 
+export interface PerformanceHistoryPoint {
+  date: string;
+  portfolioValue: number;
+  sp500Value: number;
+}
+
 export interface PerformanceSummary {
   today: { portfolioValue: number; sp500Value: number; cashBalance: number; date: string } | null;
   daily: ReturnMetric;
   weekly: ReturnMetric;
   monthly: ReturnMetric;
+  /** Up to 90 days of actual recorded snapshots, ascending by date — the
+   * same rows lib/jobs/generateRiskAssessment.ts and lib/domain/simulator.ts
+   * already read for volatility/backtesting. Never interpolated or
+   * backward-reconstructed; a short list just means few snapshots have
+   * accumulated yet. */
+  history: PerformanceHistoryPoint[];
 }
 
 async function findSnapshotAtOrBefore(daysAgo: number, latestDate: Date) {
@@ -64,13 +76,16 @@ export async function getPerformanceSummary(): Promise<PerformanceSummary> {
   const latest = await prisma.performanceSnapshot.findFirst({ orderBy: { date: 'desc' } });
   if (!latest) {
     const unavailable: ReturnMetric = { available: false, note: 'No performance snapshots recorded yet.' };
-    return { today: null, daily: unavailable, weekly: unavailable, monthly: unavailable };
+    return { today: null, daily: unavailable, weekly: unavailable, monthly: unavailable, history: [] };
   }
 
-  const [dayAgo, weekAgo, monthAgo] = await Promise.all([
+  const [dayAgo, weekAgo, monthAgo, recentRowsDesc] = await Promise.all([
     findSnapshotAtOrBefore(1, latest.date),
     findSnapshotAtOrBefore(7, latest.date),
     findSnapshotAtOrBefore(30, latest.date),
+    // Most-recent-90 by date, not "first 90 ever recorded" — matters once
+    // more than 90 days of snapshots have accumulated.
+    prisma.performanceSnapshot.findMany({ orderBy: { date: 'desc' }, take: 90 }),
   ]);
 
   return {
@@ -83,5 +98,12 @@ export async function getPerformanceSummary(): Promise<PerformanceSummary> {
     daily: computeReturn(latest, dayAgo, 'daily'),
     weekly: computeReturn(latest, weekAgo, 'weekly'),
     monthly: computeReturn(latest, monthAgo, 'monthly'),
+    history: [...recentRowsDesc]
+      .reverse()
+      .map((row) => ({
+        date: row.date.toISOString().slice(0, 10),
+        portfolioValue: Number(row.portfolioValue),
+        sp500Value: Number(row.sp500Value),
+      })),
   };
 }

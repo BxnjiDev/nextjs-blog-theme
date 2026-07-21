@@ -44,6 +44,8 @@ function buildHypotheticalView(h: HoldingBaseline, quantity: number): HoldingVie
     unrealizedPnlPercent: costBasisTotal > 0 ? (unrealizedPnl / costBasisTotal) * 100 : 0,
     quoteAsOf: h.quoteAsOf,
     quoteQuality: h.quoteQuality,
+    convictionScore: h.convictionScore,
+    thesisLastReviewedAt: null,
   };
 }
 
