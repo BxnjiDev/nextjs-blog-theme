@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 
 /**
@@ -83,7 +84,7 @@ const STATE_CORE_GRADIENT: Record<AtlasCoreState, string> = {
 const SPINNING_STATES = new Set<AtlasCoreState>(['verifying', 'initializing', 'thinking', 'streaming']);
 const PULSING_STATES = new Set<AtlasCoreState>(['idle', 'attention', 'warning']);
 
-const SIZE_PX: Record<'sm' | 'md' | 'lg' | 'xl', number> = { sm: 32, md: 40, lg: 64, xl: 96 };
+const SIZE_PX: Record<'sm' | 'md' | 'lg' | 'xl' | 'xxl', number> = { sm: 32, md: 40, lg: 64, xl: 96, xxl: 148 };
 
 export default function AtlasCore({
   state = 'idle',
@@ -94,7 +95,17 @@ export default function AtlasCore({
   size?: keyof typeof SIZE_PX;
   className?: string;
 }) {
-  const reduceMotion = useReducedMotion();
+  // Framer Motion's useReducedMotion reflects the real OS preference from
+  // the client's very first render, while SSR always assumes "not reduced"
+  // — comparing them straight away causes a hydration mismatch wherever
+  // this state feeds a render-time animate() value (as it now does across
+  // Home and Portfolio's hero orbs, not just login/init). Gating behind
+  // `mounted` keeps the first client render identical to the server's,
+  // then reconciles to the true preference in a normal post-mount update.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const reduceMotionRaw = useReducedMotion();
+  const reduceMotion = mounted ? reduceMotionRaw : false;
   const px = SIZE_PX[size];
   const ringColor = STATE_RING_COLOR[state];
   const spinning = !reduceMotion && SPINNING_STATES.has(state);

@@ -33,22 +33,27 @@ export default function PerformanceChart({ history }: { history: PerformanceHist
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Performance</h2>
-          {ret ? (
-            <p className={`mt-1 font-mono text-lg ${positive ? 'text-risk-low' : 'text-risk-high'}`}>
-              {formatPercent(ret.returnPercent)}
-              <span className="ml-1.5 text-xs text-atlas-text-tertiary">
-                ({ret.vsSp500Percent >= 0 ? '+' : ''}
-                {ret.vsSp500Percent.toFixed(2)}pp vs. S&amp;P 500)
-              </span>
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-atlas-text-tertiary">Not enough snapshot history for this window yet.</p>
-          )}
-        </div>
-        <div className="flex rounded-lg border border-atlas-border p-0.5">
+      <div>
+        <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Performance</h2>
+        {ret ? (
+          <p className={`mt-1 font-mono text-2xl sm:text-3xl ${positive ? 'text-risk-low' : 'text-risk-high'}`}>
+            {formatPercent(ret.returnPercent)}
+            <span className="ml-2 font-sans text-sm font-normal text-atlas-text-tertiary">
+              ({ret.vsSp500Percent >= 0 ? '+' : ''}
+              {ret.vsSp500Percent.toFixed(2)}pp vs. S&amp;P 500)
+            </span>
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-atlas-text-tertiary">Not enough snapshot history for this window yet.</p>
+        )}
+      </div>
+
+      {/* The flight path — full-width, no card border, a faint mesh wash for
+          depth. The period toggle floats over the chart itself (a glass
+          pill, top-right) instead of sharing a header row with it. */}
+      <div className="relative mt-3">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-atlas-mesh opacity-30" />
+        <div className="absolute right-1 top-1 z-10 flex rounded-lg border border-atlas-border bg-atlas-surface/70 p-0.5 backdrop-blur-sm sm:right-2 sm:top-2">
           {PERIODS.map((p) => (
             <button
               key={p}
@@ -63,20 +68,20 @@ export default function PerformanceChart({ history }: { history: PerformanceHist
             </button>
           ))}
         </div>
-      </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={period}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: MOTION.duration.stage }}
-          className="mt-4"
-        >
-          <TrendLineChart data={slice.map((p) => ({ label: p.date.slice(5), value: p.portfolioValue }))} color={positive ? '#8b5cf6' : '#dc2626'} height={200} />
-        </motion.div>
-      </AnimatePresence>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={period}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: MOTION.duration.stage }}
+            className="relative"
+          >
+            <TrendLineChart data={slice.map((p) => ({ label: p.date.slice(5), value: p.portfolioValue }))} color={positive ? '#8b5cf6' : '#dc2626'} height={280} />
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

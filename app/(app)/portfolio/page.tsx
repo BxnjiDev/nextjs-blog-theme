@@ -1,13 +1,26 @@
 import Link from 'next/link';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { getPortfolioOverview } from '@/lib/domain/portfolio';
 import { getPerformanceSummary } from '@/lib/domain/performance';
 import { prisma } from '@/lib/prisma';
 import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/format';
 import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
-import HeroMetric from '@/components/shared/HeroMetric';
+import AnimatedNumber from '@/components/motion/AnimatedNumber';
+import AtlasCore, { type AtlasCoreState } from '@/components/atlas-identity/AtlasCore';
 import PerformanceChart from '@/components/portfolio/PerformanceChart';
 import PortfolioComposition from '@/components/portfolio/PortfolioComposition';
+
+/** Same orb vocabulary as Home's AtlasReadout, driven by portfolio risk
+ * instead of portfolio health — the shared hero language (value + a
+ * companion orb) that gives Home and Portfolio one continuous identity,
+ * each reading its own most relevant signal. */
+function riskState(score: number | null): AtlasCoreState {
+  if (score == null) return 'offline';
+  if (score < 40) return 'ready';
+  if (score < 70) return 'idle';
+  return 'attention';
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -40,31 +53,46 @@ export default async function OverviewPage() {
 
   const vsSp500 = overview.dayChangePercent; // placeholder until a benchmark daily-change feed exists
   const concentrationPct = overview.totalValue > 0 && overview.largestWinner ? (overview.largestWinner.marketValue / overview.totalValue) * 100 : 0;
+  const dayPositive = overview.dayChangePercent >= 0;
 
   return (
     <div className="space-y-14">
       <AutoRefresh />
 
-      {/* Hero — shared composition with Home, so the two pages read as one
-          product. Everything else here is secondary to this one number. */}
+      {/* Hero — same orb + value language as Home, so the two pages read as
+          one product, here reading portfolio risk instead of health.
+          Everything else here is secondary to this one number. */}
       <FadeInView>
-        <HeroMetric
-          eyebrow="Portfolio"
-          value={overview.totalValue}
-          changeValue={overview.dayChangeValue}
-          changePercent={overview.dayChangePercent}
-          changeLabel="today"
-          meta={
-            <>
-              Last updated {formatRelativeTime(overview.lastSyncedAt)} · mock data unless a real account has been
-              synced — see{' '}
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+          <AtlasCore state={riskState(latestRisk?.overallScore ?? null)} size="xl" className="shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Portfolio</p>
+            <div className="mt-3 flex flex-wrap items-baseline gap-4">
+              <AnimatedNumber
+                value={overview.totalValue}
+                format="currency0"
+                className="text-5xl font-semibold tracking-tight text-atlas-text sm:text-6xl"
+                duration={1.1}
+              />
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium ${
+                  dayPositive ? 'bg-risk-low/10 text-risk-low' : 'bg-risk-high/10 text-risk-high'
+                }`}
+              >
+                {dayPositive ? <ArrowUpRight size={14} aria-hidden="true" /> : <ArrowDownRight size={14} aria-hidden="true" />}
+                {formatCurrency(Math.abs(overview.dayChangeValue))} ({formatPercent(overview.dayChangePercent)})
+                <span className="ml-1 text-xs opacity-70">today</span>
+              </span>
+            </div>
+            <p className="mt-3 text-sm text-atlas-text-tertiary">
+              Last updated {formatRelativeTime(overview.lastSyncedAt)} · mock data unless a real account has been synced — see{' '}
               <Link href="/connections" className="underline decoration-atlas-border hover:decoration-atlas-text-secondary">
                 Connections
               </Link>
               .
-            </>
-          }
-        />
+            </p>
+          </div>
+        </div>
       </FadeInView>
 
       {/* Thin analytics strip — plain label/value pairs separated by
