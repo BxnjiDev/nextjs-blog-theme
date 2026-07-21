@@ -8,6 +8,7 @@ import ChatMessageBubble, { type ChatMessageData } from './ChatMessageBubble';
 import SuggestedPrompts from './SuggestedPrompts';
 import TypingIndicator from './TypingIndicator';
 import StatusBanner from '@/components/StatusBanner';
+import AtlasCore from '@/components/atlas-identity/AtlasCore';
 
 interface StreamEvent {
   type: 'conversation' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
@@ -120,10 +121,12 @@ export default function AtlasChatClient({
   }
 
   const showEmptyState = messages.length === 0 && !isStreaming;
+  const coreState = error ? 'error' : streamingText ? 'streaming' : isStreaming ? 'thinking' : 'idle';
+  const statusLabel = error ? 'error' : streamingText ? 'responding…' : isStreaming ? 'thinking…' : 'online';
 
   return (
     <div className="relative flex h-full flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-atlas-border-subtle px-4 py-3.5 sm:px-6">
+      <div className="flex items-center gap-2.5 border-b border-atlas-border-subtle px-4 py-3 sm:px-6">
         {onOpenConversations && (
           <button
             type="button"
@@ -134,12 +137,9 @@ export default function AtlasChatClient({
             <MessageSquareText size={16} strokeWidth={1.75} />
           </button>
         )}
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-atlas-accent-bright opacity-60" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-atlas-accent-bright" />
-        </span>
+        <AtlasCore state={coreState} size="sm" />
         <span className="text-sm font-medium text-atlas-text">Atlas</span>
-        <span className="text-xs text-atlas-text-tertiary">{isStreaming ? 'thinking…' : 'online'}</span>
+        <span className="text-xs text-atlas-text-tertiary">{statusLabel}</span>
       </div>
 
       <div ref={scrollRef} className="atlas-scrollbar relative flex-1 space-y-4 overflow-y-auto px-6 py-6">
