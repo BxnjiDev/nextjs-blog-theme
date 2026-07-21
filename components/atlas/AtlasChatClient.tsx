@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { SendHorizontal, Sparkles } from 'lucide-react';
+import { MessageSquareText, SendHorizontal, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import ChatMessageBubble, { type ChatMessageData } from './ChatMessageBubble';
 import SuggestedPrompts from './SuggestedPrompts';
@@ -26,9 +26,11 @@ function tempId(): string {
 export default function AtlasChatClient({
   conversationId,
   initialMessages,
+  onOpenConversations,
 }: {
   conversationId?: string;
   initialMessages: ChatMessageData[];
+  onOpenConversations?: () => void;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessageData[]>(initialMessages);
@@ -121,7 +123,17 @@ export default function AtlasChatClient({
 
   return (
     <div className="relative flex h-full flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-atlas-border-subtle px-6 py-3.5">
+      <div className="flex items-center gap-2 border-b border-atlas-border-subtle px-4 py-3.5 sm:px-6">
+        {onOpenConversations && (
+          <button
+            type="button"
+            onClick={onOpenConversations}
+            aria-label="Open conversations"
+            className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-atlas-text-secondary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text md:hidden"
+          >
+            <MessageSquareText size={16} strokeWidth={1.75} />
+          </button>
+        )}
         <span className="relative flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-atlas-accent-bright opacity-60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-atlas-accent-bright" />

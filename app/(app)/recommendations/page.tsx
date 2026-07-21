@@ -47,7 +47,7 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
     <div className="space-y-14">
       <FadeInView>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Recommendations</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-atlas-text">Mission briefings</h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-atlas-text">Decision log</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
           Every recommendation Atlas has ever generated, permanently — what you did about it, and how it
           performed.

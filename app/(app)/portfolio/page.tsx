@@ -78,7 +78,9 @@ export default async function OverviewPage() {
             <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">vs. S&amp;P 500 (day)</p>
             <p className={`mt-1 font-mono text-lg ${vsSp500 >= 0 ? 'text-risk-low' : 'text-risk-high'}`}>
               {formatPercent(vsSp500)}
-              <span className="ml-1.5 text-xs text-atlas-text-tertiary">@ {overview.sp500Level.toLocaleString()}</span>
+              <span className="ml-1.5 text-xs text-atlas-text-tertiary" title="S&amp;P 500 index level used for this comparison">
+                S&amp;P {overview.sp500Level.toLocaleString()}
+              </span>
             </p>
           </div>
           <div>

@@ -19,6 +19,16 @@ const TREND_COLOR: Record<string, string> = {
   UNKNOWN: 'text-atlas-text-tertiary',
 };
 
+/** Truncates at the last whole word within the limit instead of a raw
+ * character slice, so badges never cut off mid-word (e.g. "set ANT..."
+ * instead of "set ANTHROPIC_API_KEY"). */
+function truncateWords(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut}…`;
+}
+
 export default async function IntelligencePage() {
   const intelligence = await getPortfolioIntelligence();
 
@@ -80,12 +90,12 @@ export default async function IntelligencePage() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     {h.thesis.risks && (
                       <span className="rounded-full border border-risk-high/20 bg-risk-high/5 px-2.5 py-1 text-xs text-risk-high/90">
-                        Risk: {h.thesis.risks.length > 60 ? `${h.thesis.risks.slice(0, 60)}…` : h.thesis.risks}
+                        Risk: {truncateWords(h.thesis.risks, 60)}
                       </span>
                     )}
                     {h.thesis.catalysts && (
                       <span className="rounded-full border border-atlas-emerald/20 bg-atlas-emerald/5 px-2.5 py-1 text-xs text-atlas-emerald/90">
-                        Catalyst: {h.thesis.catalysts.length > 60 ? `${h.thesis.catalysts.slice(0, 60)}…` : h.thesis.catalysts}
+                        Catalyst: {truncateWords(h.thesis.catalysts, 60)}
                       </span>
                     )}
                   </div>
