@@ -7,6 +7,7 @@ import FadeInView from '@/components/motion/FadeInView';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 import { normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { formatPercent } from '@/lib/format';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +69,12 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
       outcome: true,
     },
   });
-  if (!recommendation) notFound();
+  // A recommendation ID alone doesn't prove it belongs to the active
+  // account — without this check, guessing or reusing an ID from another
+  // account (e.g. leftover seed data) would render its full Investment
+  // Memo. Treat a cross-account match the same as "doesn't exist."
+  const activeAccountId = await getActiveAccountId();
+  if (!recommendation || recommendation.holding.accountId !== activeAccountId) notFound();
 
   const [latestCalibration, freshness] = await Promise.all([
     prisma.confidenceCalibration.findFirst({ orderBy: { generatedAt: 'desc' } }),

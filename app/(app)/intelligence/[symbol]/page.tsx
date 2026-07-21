@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ActionBadge from '@/components/ActionBadge';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
+import FadeInView from '@/components/motion/FadeInView';
 
 interface ExplainabilityShape {
   whyNow: string;
@@ -36,23 +38,30 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default async function ThesisDetailPage({ params }: { params: { symbol: string } }) {
   const symbol = params.symbol.toUpperCase();
 
-  const holding = await prisma.holding.findFirst({
-    where: { symbol },
-    include: {
-      thesis: {
+  // Scoped to the active account for the same reason as every other page
+  // resolving "the" portfolio (see lib/domain/portfolio.ts) — an unscoped
+  // lookup here could match another account's same-symbol holding (e.g.
+  // leftover seed data) instead of notFound()-ing correctly.
+  const accountId = await getActiveAccountId();
+  const holding = accountId
+    ? await prisma.holding.findFirst({
+        where: { symbol, accountId },
         include: {
-          changeEvents: { orderBy: { createdAt: 'desc' } },
-          convictionAssessments: { orderBy: { generatedAt: 'asc' } },
-          accuracyScores: { orderBy: { generatedAt: 'desc' }, take: 1 },
+          thesis: {
+            include: {
+              changeEvents: { orderBy: { createdAt: 'desc' } },
+              convictionAssessments: { orderBy: { generatedAt: 'asc' } },
+              accuracyScores: { orderBy: { generatedAt: 'desc' }, take: 1 },
+            },
+          },
+          recommendations: {
+            orderBy: { generatedAt: 'desc' },
+            take: 10,
+            include: { outcome: true },
+          },
         },
-      },
-      recommendations: {
-        orderBy: { generatedAt: 'desc' },
-        take: 10,
-        include: { outcome: true },
-      },
-    },
-  });
+      })
+    : null;
 
   if (!holding) notFound();
 
@@ -73,31 +82,31 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
 
   return (
     <div className="space-y-8">
-      <div>
-        <Link href="/intelligence" className="text-sm text-gray-500 hover:underline">
+      <FadeInView>
+        <Link href="/intelligence" className="text-sm text-atlas-text-tertiary hover:text-atlas-text-secondary">
           ← Portfolio Intelligence
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold">
-          {holding.symbol} <span className="font-normal text-gray-500">— {holding.name}</span>
+        <h1 className="mt-2 text-xl font-semibold tracking-tight text-atlas-text">
+          {holding.symbol} <span className="font-normal text-atlas-text-tertiary">— {holding.name}</span>
         </h1>
-      </div>
+      </FadeInView>
 
       {!thesis ? (
-        <p className="text-sm text-gray-500">No thesis established yet — pending the next thesis-review job run.</p>
+        <p className="text-sm text-atlas-text-tertiary">No thesis established yet — pending the next thesis-review job run.</p>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800 md:col-span-2">
+            <div className="atlas-glass rounded-xl p-4 md:col-span-2">
               <h2 className="mb-2 font-medium">Company overview</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{thesis.companyOverview}</p>
+              <p className="text-sm text-atlas-text-secondary">{thesis.companyOverview}</p>
               <h2 className="mb-2 mt-4 font-medium">Original thesis</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{thesis.originalThesis}</p>
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-atlas-text-secondary">{thesis.originalThesis}</p>
+              <p className="mt-3 text-xs text-atlas-text-tertiary">
                 Established {thesis.establishedAt.toLocaleDateString()} · Last reviewed {thesis.lastReviewedAt.toLocaleString()} · Horizon:{' '}
                 {thesis.investmentHorizon}
               </p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="mb-2 font-medium">Conviction</h2>
               <p className="text-3xl font-semibold">{thesis.convictionScore}/100</p>
               <ConfidenceBadge score={Math.round(thesis.convictionScore / 10)} />
@@ -108,54 +117,54 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Growth drivers</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.growthDrivers}</p>
+            <div className="atlas-glass rounded-xl p-4">
+              <h2 className="font-medium text-atlas-text">Growth drivers</h2>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.growthDrivers}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Competitive advantages</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.competitiveAdvantages}</p>
+            <div className="atlas-glass rounded-xl p-4">
+              <h2 className="font-medium text-atlas-text">Competitive advantages</h2>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.competitiveAdvantages}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="font-medium text-risk-low">Bull case</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.bullCase}</p>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.bullCase}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="font-medium text-risk-high">Bear case</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.bearCase}</p>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.bearCase}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Risks</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.risks}</p>
+            <div className="atlas-glass rounded-xl p-4">
+              <h2 className="font-medium text-atlas-text">Risks</h2>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.risks}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Catalysts</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.catalysts}</p>
+            <div className="atlas-glass rounded-xl p-4">
+              <h2 className="font-medium text-atlas-text">Catalysts</h2>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.catalysts}</p>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="font-medium text-risk-low">What would strengthen this</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.whatWouldStrengthen}</p>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.whatWouldStrengthen}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="font-medium text-risk-high">What would weaken this</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.whatWouldWeaken}</p>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.whatWouldWeaken}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Sell conditions</h2>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{thesis.sellConditions}</p>
+            <div className="atlas-glass rounded-xl p-4">
+              <h2 className="font-medium text-atlas-text">Sell conditions</h2>
+              <p className="mt-1 text-sm text-atlas-text-secondary">{thesis.sellConditions}</p>
             </div>
           </div>
 
           {recentFundamentals.length > 0 && (
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="mb-3 font-medium">Recent financials</h2>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[480px] text-left text-sm">
                   <thead>
-                    <tr className="text-xs text-gray-500 dark:text-gray-400">
+                    <tr className="text-xs text-atlas-text-tertiary">
                       <th className="pb-2 pr-4">Period</th>
                       <th className="pb-2 pr-4">Revenue</th>
                       <th className="pb-2 pr-4">YoY growth</th>
@@ -165,7 +174,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                   </thead>
                   <tbody>
                     {recentFundamentals.map((f) => (
-                      <tr key={f.id} className="border-t border-gray-100 dark:border-gray-800">
+                      <tr key={f.id} className="border-t border-atlas-border-subtle">
                         <td className="py-2 pr-4">
                           {f.fiscalPeriod} FY{f.fiscalYear}
                         </td>
@@ -178,16 +187,16 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                   </tbody>
                 </table>
               </div>
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-2 text-xs text-atlas-text-tertiary">
                 Source: {recentFundamentals[0].source} ({recentFundamentals[0].quality}).
               </p>
             </div>
           )}
 
           {latestConviction && (
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="mb-3 font-medium">Conviction category breakdown</h2>
-              <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mb-3 text-xs text-atlas-text-tertiary">
                 Deterministic, code-computed scores. A category shows &ldquo;no data&rdquo; when this app has no
                 data source to score it from — never a guessed number.
               </p>
@@ -195,8 +204,8 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                 {Object.entries(CATEGORY_LABELS).map(([key, label]) => {
                   const score = (latestConviction as unknown as Record<string, number | null>)[key];
                   return (
-                    <div key={key} className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+                    <div key={key} className="rounded-lg border border-atlas-border-subtle bg-atlas-surface-raised px-3 py-2">
+                      <p className="text-xs text-atlas-text-tertiary">{label}</p>
                       <p className="text-lg font-semibold">{score !== null ? `${score}/100` : 'No data'}</p>
                     </div>
                   );
@@ -205,21 +214,21 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
             </div>
           )}
 
-          <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="atlas-glass rounded-xl p-4">
             <h2 className="mb-3 font-medium">Thesis timeline</h2>
             {thesis.changeEvents.length === 0 ? (
-              <p className="text-sm text-gray-500">No changes recorded yet.</p>
+              <p className="text-sm text-atlas-text-tertiary">No changes recorded yet.</p>
             ) : (
               <ol className="space-y-4">
                 {thesis.changeEvents.map((event) => (
-                  <li key={event.id} className="border-l-2 border-gray-200 pl-4 dark:border-gray-800">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <li key={event.id} className="border-l-2 border-atlas-border pl-4">
+                    <p className="text-xs text-atlas-text-tertiary">
                       {event.createdAt.toLocaleString()} · {event.changeType.replace(/_/g, ' ').toLowerCase()}
                     </p>
                     {event.whatChanged && <p className="mt-1 text-sm font-medium">{event.whatChanged}</p>}
-                    {event.whyChanged && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{event.whyChanged}</p>}
+                    {event.whyChanged && <p className="mt-1 text-sm text-atlas-text-secondary">{event.whyChanged}</p>}
                     {(event.confidenceBefore !== null || event.confidenceAfter !== null) && (
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 text-xs text-atlas-text-tertiary">
                         Confidence: {event.confidenceBefore ?? 'n/a'} → {event.confidenceAfter ?? 'n/a'}
                       </p>
                     )}
@@ -230,7 +239,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           </div>
 
           {latestAccuracy && (
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="mb-1 font-medium">Thesis accuracy (retrospective)</h2>
               <p className="text-3xl font-semibold">{latestAccuracy.overallScore}/100</p>
               <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
@@ -241,16 +250,16 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                 <p>Catalysts achieved: No deterministic measure available.</p>
                 <p>Risks realized: No deterministic measure available.</p>
               </div>
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-2 text-xs text-atlas-text-tertiary">
                 Computed {latestAccuracy.generatedAt.toLocaleDateString()} — see lib/jobs/computeThesisAccuracy.ts for methodology.
               </p>
             </div>
           )}
 
           {latestRecommendation && latestRecommendation.proposedDollarAmount !== null && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+            <div className="rounded-xl border border-atlas-warning/20 bg-atlas-warning/5 p-4">
               <h2 className="mb-1 font-medium">Evaluation sizing (manual execution only)</h2>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-atlas-text-secondary">
                 Proposed ${Number(latestRecommendation.proposedDollarAmount).toFixed(0)} (
                 {latestRecommendation.percentageOfPortfolio?.toFixed(1) ?? '0.0'}% of the experimental portfolio). Atlas does not place
                 this order — size and execute it yourself if you agree.
@@ -259,7 +268,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           )}
 
           {latestRecommendation && explainability && (
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+            <div className="atlas-glass rounded-xl p-4">
               <h2 className="mb-3 font-medium">Explainability (latest recommendation)</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 <p className="text-sm"><span className="font-medium">Why now:</span> {explainability.whyNow}</p>
@@ -270,21 +279,21 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                 <p className="text-sm"><span className="font-medium">What would invalidate this:</span> {explainability.invalidationConditions}</p>
                 <p className="text-sm md:col-span-2"><span className="font-medium">Vs. holding cash / buying SPY:</span> {explainability.vsCashAndSpy}</p>
               </div>
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-3 text-xs text-atlas-text-tertiary">
                 Expected outcome: {latestRecommendation.expectedOutcome} (horizon: {latestRecommendation.expectedTimeHorizon})
               </p>
             </div>
           )}
 
-          <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="atlas-glass rounded-xl p-4">
             <h2 className="mb-3 font-medium">Recommendation history &amp; performance attribution</h2>
             {recommendations.length === 0 ? (
-              <p className="text-sm text-gray-500">No recommendations generated yet.</p>
+              <p className="text-sm text-atlas-text-tertiary">No recommendations generated yet.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
-                    <tr className="text-xs text-gray-500 dark:text-gray-400">
+                    <tr className="text-xs text-atlas-text-tertiary">
                       <th className="pb-2 pr-4">Date</th>
                       <th className="pb-2 pr-4">Action</th>
                       <th className="pb-2 pr-4">Confidence</th>
@@ -296,7 +305,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                   </thead>
                   <tbody>
                     {recommendations.map((r) => (
-                      <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800">
+                      <tr key={r.id} className="border-t border-atlas-border-subtle">
                         <td className="py-2 pr-4">{r.generatedAt.toLocaleDateString()}</td>
                         <td className="py-2 pr-4">
                           <ActionBadge action={r.action} />
@@ -314,10 +323,10 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                 </table>
               </div>
             )}
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-xs text-atlas-text-tertiary">
               Atlas has no execution layer — every outcome above tracks what would have happened had this holding simply
               been held, benchmarked against SPY. Grading (correct/incorrect) happens once, at the 90-day mark; see{' '}
-              <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/evaluateRecommendations.ts</code>.
+              <code className="rounded bg-atlas-surface-raised px-1">lib/jobs/evaluateRecommendations.ts</code>.
             </p>
           </div>
         </>

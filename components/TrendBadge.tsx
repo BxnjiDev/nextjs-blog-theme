@@ -2,9 +2,9 @@ import type { ConvictionTrend } from '@/lib/domain/intelligence';
 
 const styles: Record<ConvictionTrend, string> = {
   IMPROVING: 'bg-risk-low/10 text-risk-low',
-  STABLE: 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  STABLE: 'bg-atlas-surface-raised text-atlas-text-secondary',
   WEAKENING: 'bg-risk-high/10 text-risk-high',
-  UNKNOWN: 'bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  UNKNOWN: 'bg-atlas-surface-raised text-atlas-text-tertiary',
 };
 
 const labels: Record<ConvictionTrend, string> = {

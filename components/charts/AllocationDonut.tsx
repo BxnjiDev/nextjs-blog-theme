@@ -15,7 +15,7 @@ const PALETTE = ['#3b82f6', '#22d3ee', '#818cf8', '#34d399', '#38bdf8', '#a78bfa
 export default function AllocationDonut({ data, height = 220 }: { data: AllocationSlice[]; height?: number }) {
   if (data.length === 0) {
     return (
-      <div className="flex h-[220px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+      <div className="flex h-[220px] items-center justify-center text-sm text-atlas-text-tertiary">
         No allocation data available.
       </div>
     );

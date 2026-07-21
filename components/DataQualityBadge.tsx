@@ -14,8 +14,8 @@ const labels: Record<DataQuality, string> = {
 
 const styles: Record<DataQuality, string> = {
   live: 'bg-risk-low/10 text-risk-low',
-  delayed: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  mock: 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  delayed: 'bg-atlas-cyan/10 text-atlas-cyan',
+  mock: 'bg-atlas-surface-raised text-atlas-text-tertiary',
 };
 
 export default function DataQualityBadge({

@@ -3,7 +3,7 @@ const styles: Record<string, string> = {
   HOLD: 'bg-atlas-surface-raised text-atlas-text-secondary',
   REDUCE: 'bg-risk-medium/10 text-risk-medium',
   SELL: 'bg-risk-high/10 text-risk-high',
-  WATCH: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+  WATCH: 'bg-atlas-cyan/10 text-atlas-cyan',
 };
 
 const labels: Record<string, string> = {
