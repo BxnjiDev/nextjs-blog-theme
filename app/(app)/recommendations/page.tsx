@@ -168,12 +168,12 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
                         {r.userDecision === 'PENDING' && (
                           <div className="flex gap-3">
                             <form action={setRecommendationDecision.bind(null, r.id, 'REJECTED', '')}>
-                              <button type="submit" className="text-xs text-risk-high underline decoration-dotted hover:text-risk-high/80">
+                              <button type="submit" className="text-xs text-risk-high underline decoration-dotted transition-opacity hover:text-risk-high/80 active:opacity-60">
                                 Reject
                               </button>
                             </form>
                             <form action={setRecommendationDecision.bind(null, r.id, 'DEFERRED', '')}>
-                              <button type="submit" className="text-xs text-atlas-cyan underline decoration-dotted hover:text-atlas-cyan/80">
+                              <button type="submit" className="text-xs text-atlas-cyan underline decoration-dotted transition-opacity hover:text-atlas-cyan/80 active:opacity-60">
                                 Defer
                               </button>
                             </form>

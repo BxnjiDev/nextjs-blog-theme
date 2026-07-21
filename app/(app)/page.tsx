@@ -15,6 +15,8 @@ import RecommendationCard from '@/components/RecommendationCard';
 import WidgetCard from '@/components/home/WidgetCard';
 import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
+import NarrativeSummary from '@/components/home/NarrativeSummary';
+import { buildHomeNarrative } from '@/lib/copy/homeNarrative';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +49,9 @@ export default async function HomePage() {
       <AutoRefresh />
       <FadeInView>
         <h1 className="text-3xl font-semibold tracking-tight text-atlas-text">{data.greeting}</h1>
-        <p className="mt-1.5 text-sm text-atlas-text-secondary">Here&rsquo;s what deserves your attention right now.</p>
+        <div className="mt-3">
+          <NarrativeSummary sentences={buildHomeNarrative(data)} />
+        </div>
       </FadeInView>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -8,6 +8,7 @@ import { ROBINHOOD_INBOX_DIR, type RobinhoodIngestResult } from '@/lib/domain/ro
 import { prisma } from '@/lib/prisma';
 import { logout } from '@/app/login/actions';
 import { formatRelativeTime } from '@/lib/format';
+import StatusBanner from '@/components/StatusBanner';
 import { syncRobinhoodPayload, checkRobinhoodInbox } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -129,41 +130,50 @@ export default async function SettingsPage({ searchParams }: { searchParams: { s
         </div>
 
         {ingestResult && ingestResult.errors.length > 0 && (
-          <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <StatusBanner variant="error" className="mb-3">
             {ingestResult.errors.map((e, i) => (
               <p key={i}>{e}</p>
             ))}
-          </div>
+          </StatusBanner>
         )}
 
         {syncErrors.length > 0 && (
-          <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <StatusBanner variant="error" className="mb-3">
             {syncErrors.map((e, i) => (
               <p key={i}>{e}</p>
             ))}
-          </div>
+          </StatusBanner>
         )}
         {syncWarnings.length > 0 && (
-          <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          <StatusBanner variant="warning" className="mb-3">
             {syncWarnings.map((w, i) => (
               <p key={i}>{w}</p>
             ))}
-          </div>
+          </StatusBanner>
         )}
 
         {searchParams.synced === '1' && (
-          <div className="mb-3 rounded-lg border border-risk-low/20 bg-risk-low/10 px-3 py-2 text-xs text-risk-low">Synced successfully.</div>
+          <StatusBanner variant="success" className="mb-3">
+            Synced successfully.
+          </StatusBanner>
         )}
         {searchParams.syncError && (
-          <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{searchParams.syncError}</div>
+          <StatusBanner variant="error" className="mb-3">
+            {searchParams.syncError}
+          </StatusBanner>
         )}
         {searchParams.syncInfo && (
-          <div className="mb-3 rounded-lg border border-atlas-border bg-atlas-surface-raised px-3 py-2 text-xs text-atlas-text-secondary">{searchParams.syncInfo}</div>
+          <StatusBanner variant="info" className="mb-3">
+            {searchParams.syncInfo}
+          </StatusBanner>
         )}
 
         <div className="flex flex-wrap items-center gap-3">
           <form action={checkRobinhoodInbox}>
-            <button type="submit" className="rounded-lg bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-atlas-accent/90">
+            <button
+              type="submit"
+              className="rounded-lg bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-atlas-accent-bright hover:shadow-glow-accent active:scale-[0.97]"
+            >
               Check inbox now
             </button>
           </form>

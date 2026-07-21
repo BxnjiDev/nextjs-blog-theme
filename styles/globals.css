@@ -75,6 +75,23 @@ body {
   background-color: theme('colors.atlas.accent / 35%');
 }
 
+/* One consistent keyboard-focus treatment for every interactive element
+   in the app, instead of the browser's default blue outline on some
+   controls and nothing at all on others (most of the ~10 secondary pages
+   under the sidebar's "More" group had no focus styling whatsoever).
+   :focus-visible (not :focus) so it only appears for keyboard/assistive
+   navigation, never on a mouse click. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid theme('colors.atlas.accent-bright');
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Markdown rendered inside Atlas Chat (react-markdown output) */
 .atlas-markdown :where(p, ul, ol) {
   margin-top: 0.5em;

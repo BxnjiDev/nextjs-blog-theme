@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import BootSequence from './BootSequence';
+import StatusBanner from '@/components/StatusBanner';
 
 /**
  * Client wrapper so app/login/page.tsx (a server component, needed to read
@@ -73,15 +74,7 @@ export default function LoginExperience({
             />
           </div>
 
-          {hasError && (
-            <motion.p
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-            >
-              Invalid email or password.
-            </motion.p>
-          )}
+          {hasError && <StatusBanner variant="error">Invalid email or password.</StatusBanner>}
 
           <button
             type="submit"

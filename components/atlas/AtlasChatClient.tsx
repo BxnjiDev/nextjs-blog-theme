@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import ChatMessageBubble, { type ChatMessageData } from './ChatMessageBubble';
 import SuggestedPrompts from './SuggestedPrompts';
 import TypingIndicator from './TypingIndicator';
+import StatusBanner from '@/components/StatusBanner';
 
 interface StreamEvent {
   type: 'conversation' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
@@ -174,9 +175,7 @@ export default function AtlasChatClient({
             )}
           </>
         )}
-        {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
-        )}
+        {error && <StatusBanner variant="error">{error}</StatusBanner>}
       </div>
 
       <form
