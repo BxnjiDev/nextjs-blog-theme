@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 import BootSequence from './BootSequence';
 import StatusBanner from '@/components/StatusBanner';
+import AtlasCore from '@/components/atlas-identity/AtlasCore';
 
 /**
  * Client wrapper so app/login/page.tsx (a server component, needed to read
@@ -24,7 +25,7 @@ export default function LoginExperience({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-atlas-canvas px-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-atlas-canvas atlas-grid-texture px-6">
       <div className="pointer-events-none absolute inset-0 bg-atlas-radial" />
 
       <AnimatePresence>{!booted && <BootSequence onComplete={() => setBooted(true)} />}</AnimatePresence>
@@ -35,18 +36,16 @@ export default function LoginExperience({
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: booted && !hasError ? 0.15 : 0 }}
         className="relative w-full max-w-sm"
       >
-        <div className="mb-10 text-center">
-          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-atlas-accent text-sm font-bold text-white shadow-glow-accent">
-            A
-          </div>
-          <p className="text-xl font-semibold tracking-tight text-atlas-text">Atlas</p>
-          <p className="mt-1 text-sm text-atlas-text-tertiary">Personal investment operating system</p>
+        <div className="mb-10 flex flex-col items-center text-center">
+          <AtlasCore state="idle" size="lg" />
+          <p className="mt-4 text-xl font-semibold tracking-tight text-atlas-text">Atlas</p>
+          <p className="mt-1 text-sm text-atlas-text-tertiary">Private Intelligence System</p>
         </div>
 
-        <form
-          action={loginAction}
-          className="atlas-glass space-y-4 rounded-2xl p-6"
-        >
+        <form action={loginAction} className="atlas-glass space-y-4 rounded-2xl p-6">
+          <p className="text-center text-[11px] font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">
+            Identity verification required
+          </p>
           <div>
             <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-atlas-text-secondary">
               Email
@@ -92,12 +91,14 @@ export default function LoginExperience({
             type="submit"
             className="w-full rounded-lg bg-atlas-accent px-3 py-2 text-sm font-medium text-white transition-all hover:bg-atlas-accent-bright hover:shadow-glow-accent active:scale-[0.98]"
           >
-            Sign in
+            Authorize session
           </button>
         </form>
 
         <p className="mt-6 text-center text-xs text-atlas-text-tertiary">
-          Private application. Access is restricted to the configured Atlas OS account.
+          Secure local environment · Recommendation-only operating mode.
+          <br />
+          Access is restricted to the configured Atlas account.
         </p>
       </motion.div>
     </div>

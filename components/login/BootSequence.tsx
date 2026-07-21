@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import AtlasCore from '@/components/atlas-identity/AtlasCore';
 
 interface Step {
   label: string;
@@ -10,13 +11,16 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { label: 'Robinhood connection', appearAt: 900, doneAt: 1500 },
-  { label: 'AI systems', appearAt: 1500, doneAt: 2100 },
-  { label: 'Market systems', appearAt: 2100, doneAt: 2700 },
-  { label: 'Portfolio intelligence', appearAt: 2700, doneAt: 3300 },
+  { label: 'Robinhood connection', appearAt: 600, doneAt: 1050 },
+  { label: 'AI systems', appearAt: 1050, doneAt: 1500 },
+  { label: 'Market systems', appearAt: 1500, doneAt: 1950 },
+  { label: 'Portfolio intelligence', appearAt: 1950, doneAt: 2400 },
 ];
 
-const TOTAL_DURATION_MS = 4400;
+// Shorter than the original 4.4s — "avoid unnecessarily delaying repeat
+// users" — while still giving the arrival moment room to breathe. The
+// Skip control (below) covers anyone who wants it faster still.
+const TOTAL_DURATION_MS = 3200;
 const PARTICLE_COUNT = 22;
 
 function DiagnosticLine({ label, appearAt, doneAt }: Step) {
@@ -57,10 +61,17 @@ function DiagnosticLine({ label, appearAt, doneAt }: Step) {
  * health checks (see /connections for the real ones).
  */
 export default function BootSequence({ onComplete }: { onComplete: () => void }) {
+  const reduceMotion = useReducedMotion();
   const [progress, setProgress] = useState(0);
   const [skipVisible, setSkipVisible] = useState(false);
 
   useEffect(() => {
+    if (reduceMotion) {
+      // Purely decorative — skip straight to the form rather than forcing
+      // a wait through an animation the user has asked to avoid.
+      const t = setTimeout(onComplete, 150);
+      return () => clearTimeout(t);
+    }
     const start = Date.now();
     let frame: number;
     const tick = () => {
@@ -76,7 +87,9 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
       clearTimeout(skipTimer);
       clearTimeout(doneTimer);
     };
-  }, [onComplete]);
+  }, [onComplete, reduceMotion]);
+
+  if (reduceMotion) return null;
 
   const particles = Array.from({ length: PARTICLE_COUNT }, (_, i) => i);
 
@@ -85,7 +98,7 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
       key="boot"
       exit={{ opacity: 0, scale: 1.04, filter: 'blur(10px)' }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-atlas-canvas"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-atlas-canvas atlas-grid-texture"
     >
       <div className="pointer-events-none absolute inset-0 bg-atlas-radial" />
 
@@ -117,13 +130,8 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
         })}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, scale: 0.7 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-        className="relative flex h-16 w-16 animate-glow-pulse items-center justify-center rounded-2xl bg-atlas-accent text-2xl font-bold text-white shadow-glow-accent"
-      >
-        A
+      <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} className="relative">
+        <AtlasCore state="verifying" size="xl" />
       </motion.div>
 
       <motion.p

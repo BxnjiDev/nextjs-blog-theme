@@ -6,6 +6,7 @@ import Sidebar from '@/components/shell/Sidebar';
 import PageTransition from '@/components/shell/PageTransition';
 import EvaluationBanner from '@/components/EvaluationBanner';
 import StatusIndicator from '@/components/StatusIndicator';
+import InitializationGate from '@/components/init/InitializationGate';
 
 /**
  * Shell for every authenticated Atlas OS page (everything except /login,
@@ -24,15 +25,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
 
   return (
-    <div className="atlas-shell flex min-h-screen flex-col md:flex-row">
-      <Sidebar userEmail={user.email} />
-      <div className="flex min-h-screen flex-1 flex-col overflow-y-auto">
-        {evaluationAccount && <EvaluationBanner />}
-        <StatusIndicator status={status} />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-8">
-          <PageTransition>{children}</PageTransition>
-        </main>
+    <InitializationGate>
+      <div className="atlas-shell flex min-h-screen flex-col md:flex-row">
+        <Sidebar userEmail={user.email} />
+        <div className="flex min-h-screen flex-1 flex-col overflow-y-auto">
+          {evaluationAccount && <EvaluationBanner />}
+          <StatusIndicator status={status} />
+          <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-8">
+            <PageTransition>{children}</PageTransition>
+          </main>
+        </div>
       </div>
-    </div>
+    </InitializationGate>
   );
 }
