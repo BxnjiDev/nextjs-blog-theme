@@ -16,7 +16,7 @@ const DIRECTIVE_STYLES: Record<string, string> = {
   HOLD: 'border-atlas-border text-atlas-text-secondary',
   REDUCE: 'border-atlas-warning/30 text-atlas-warning',
   SELL: 'border-risk-high/30 text-risk-high',
-  WATCH: 'border-atlas-cyan/30 text-atlas-cyan',
+  WATCH: 'border-atlas-steel/30 text-atlas-steel',
 };
 
 const DIRECTIVE_LABELS: Record<string, string> = {
@@ -96,7 +96,7 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
 
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Mission briefing</p>
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Investment memo</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight text-atlas-text">
               {recommendation.symbol}
               <span className="ml-3 text-lg font-normal text-atlas-text-tertiary">{recommendation.holding.name}</span>

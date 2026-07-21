@@ -11,7 +11,7 @@ const TYPE_STYLES: Record<TimelineEntryType, string> = {
   recommendation: 'bg-atlas-accent/10 text-atlas-accent-bright',
   transaction: 'bg-risk-low/10 text-risk-low',
   thesis_change: 'bg-risk-medium/10 text-risk-medium',
-  conviction_change: 'bg-atlas-cyan/10 text-atlas-cyan',
+  conviction_change: 'bg-atlas-steel/10 text-atlas-steel',
   risk_change: 'bg-risk-high/10 text-risk-high',
   health_change: 'bg-atlas-emerald/10 text-atlas-emerald',
   news: 'bg-atlas-surface-raised text-atlas-text-tertiary',

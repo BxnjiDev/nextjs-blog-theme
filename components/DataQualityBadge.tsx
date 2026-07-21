@@ -14,7 +14,7 @@ const labels: Record<DataQuality, string> = {
 
 const styles: Record<DataQuality, string> = {
   live: 'bg-risk-low/10 text-risk-low',
-  delayed: 'bg-atlas-cyan/10 text-atlas-cyan',
+  delayed: 'bg-atlas-steel/10 text-atlas-steel',
   mock: 'bg-atlas-surface-raised text-atlas-text-tertiary',
 };
 

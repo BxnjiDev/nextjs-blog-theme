@@ -151,7 +151,7 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
 
       <div className="relative mt-6 h-[2px] w-64 overflow-hidden rounded-full bg-atlas-border">
         <motion.div
-          className="h-full bg-gradient-to-r from-atlas-accent to-atlas-cyan"
+          className="h-full bg-gradient-to-r from-atlas-accent to-atlas-steel"
           style={{ width: `${progress}%` }}
         />
       </div>

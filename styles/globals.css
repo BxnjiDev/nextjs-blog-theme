@@ -37,9 +37,20 @@ body {
    plus a soft glow, never a hard color fill (per the "no flashy crypto
    dashboard" brief). Pair with a transition-* utility on the element. */
 .atlas-hover-glow:hover {
-  border-color: rgba(59, 130, 246, 0.35);
+  border-color: rgba(215, 38, 56, 0.32);
   box-shadow: theme('boxShadow.glow-accent');
   transform: translateY(-2px);
+}
+
+/* Very low-opacity precision grid — the "instrument panel" texture used
+   behind the login/initialization sequence and other identity moments.
+   Deliberately subtle: a hint of engineered geometry, never a visible
+   grid line competing with content. */
+.atlas-grid-texture {
+  background-image:
+    linear-gradient(rgba(245, 245, 246, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 245, 246, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
 /* Skeleton/shimmer loading state — used sparingly, only while real data is

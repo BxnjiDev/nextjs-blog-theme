@@ -7,10 +7,12 @@ export interface AllocationSlice {
   value: number;
 }
 
-// A cool blue/cyan/violet/teal family — deliberately not a rainbow set, so
-// a many-holding portfolio still reads as "one product's chart" rather
-// than a generic charting-library default.
-const PALETTE = ['#3b82f6', '#22d3ee', '#818cf8', '#34d399', '#38bdf8', '#a78bfa', '#2dd4bf', '#60a5fa', '#94a3b8'];
+// Crimson/steel/graphite family, alternating warm and cool so adjacent
+// slices stay distinguishable — deliberately not a rainbow set, and
+// deliberately not all-red (a portfolio breakdown is data, not a brand
+// moment), so it reads as "one product's chart" drawn from the Atlas
+// identity rather than a generic charting-library default.
+const PALETTE = ['#d72638', '#7c8794', '#8f1424', '#9aa1ab', '#ef3340', '#4a4e58', '#b23a4a', '#5c6470', '#33363d'];
 
 export default function AllocationDonut({ data, height = 220 }: { data: AllocationSlice[]; height?: number }) {
   if (data.length === 0) {
@@ -40,8 +42,8 @@ export default function AllocationDonut({ data, height = 220 }: { data: Allocati
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: '#111214', border: '1px solid #232429', color: '#f2f2f4' }}
-          itemStyle={{ color: '#f2f2f4' }}
+          contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: '#0b0b0d', border: '1px solid #26262c', color: '#f5f5f6' }}
+          itemStyle={{ color: '#f5f5f6' }}
           formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
         />
       </PieChart>

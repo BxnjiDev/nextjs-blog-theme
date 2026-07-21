@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
  * as something Atlas is continuously measuring, not a fixed label. */
 export default function ConfidenceMeter({ score, max = 100, label }: { score: number; max?: number; label?: string }) {
   const pct = Math.max(0, Math.min(100, (score / max) * 100));
-  const tone = pct >= 66 ? 'from-atlas-emerald to-atlas-cyan' : pct >= 40 ? 'from-atlas-warning to-atlas-accent' : 'from-risk-high to-atlas-warning';
+  const tone = pct >= 66 ? 'from-atlas-emerald to-atlas-steel' : pct >= 40 ? 'from-atlas-warning to-atlas-accent' : 'from-risk-high to-atlas-warning';
 
   return (
     <div>

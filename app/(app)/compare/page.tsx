@@ -81,7 +81,7 @@ export default async function ComparePage({ searchParams }: { searchParams: { sy
                         {r.name && !r.isCash && <span className="font-normal text-atlas-text-tertiary"> — {r.name}</span>}
                       </h2>
                       {r.isHeld && (
-                        <span className="rounded-full bg-atlas-cyan/10 px-2 py-0.5 text-xs font-medium text-atlas-cyan">Currently held</span>
+                        <span className="rounded-full bg-atlas-steel/10 px-2 py-0.5 text-xs font-medium text-atlas-steel">Currently held</span>
                       )}
                       {r.isCash && (
                         <span className="rounded-full bg-atlas-surface-raised px-2 py-0.5 text-xs font-medium text-atlas-text-tertiary">

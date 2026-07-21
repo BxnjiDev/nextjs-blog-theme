@@ -151,7 +151,7 @@ function AccountFooter({ userEmail }: { userEmail: string }) {
   return (
     <div className="border-t border-atlas-border p-3">
       <div className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-atlas-surface-hover">
-        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-atlas-accent to-atlas-cyan text-xs font-semibold text-white">
+        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-atlas-accent to-atlas-steel text-xs font-semibold text-white">
           {initial}
           <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-atlas-surface bg-atlas-emerald" />
         </div>

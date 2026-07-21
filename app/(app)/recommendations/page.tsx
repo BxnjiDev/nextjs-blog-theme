@@ -16,7 +16,7 @@ const DECISION_STYLES: Record<string, string> = {
   ACCEPTED: 'text-risk-low',
   PARTIALLY_ACCEPTED: 'text-atlas-warning',
   REJECTED: 'text-risk-high',
-  DEFERRED: 'text-atlas-cyan',
+  DEFERRED: 'text-atlas-steel',
 };
 
 export default async function RecommendationHistoryPage({ searchParams }: { searchParams: { decision?: string } }) {
@@ -183,7 +183,7 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
                               </button>
                             </form>
                             <form action={setRecommendationDecision.bind(null, r.id, 'DEFERRED', '')}>
-                              <button type="submit" className="text-xs text-atlas-cyan underline decoration-dotted transition-opacity hover:text-atlas-cyan/80 active:opacity-60">
+                              <button type="submit" className="text-xs text-atlas-steel underline decoration-dotted transition-opacity hover:text-atlas-steel/80 active:opacity-60">
                                 Defer
                               </button>
                             </form>

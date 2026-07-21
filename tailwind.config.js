@@ -14,41 +14,52 @@ module.exports = {
           medium: '#d97706',
           high: '#dc2626',
         },
-        // Atlas OS v1 shell/product-surface palette. Electric blue is the
-        // primary accent; cyan and emerald are secondary/tertiary accents
-        // used sparingly (status dots, gradients, small highlights) —
-        // never as large fills. Orange exists only for warning states.
+        // Atlas OS "Obsidian/Carbon/Crimson" identity (overnight
+        // transformation pass — replaces the earlier blue/cyan palette).
+        // Signal red is the ONE brand accent: identity, active nav,
+        // primary actions, focus states, selected series, high-value
+        // moments. It is deliberately never a page-filling color or a
+        // decorative glow on every card — see the `glow-accent` shadow
+        // below, which is restrained by design. Steel is the neutral
+        // "technical" color (delayed/watch states, secondary chart
+        // series) — it carries no brand meaning. Emerald=genuine positive
+        // performance, amber=warning/stale/degraded — both semantic, not
+        // brand, and unchanged from before this pass.
         atlas: {
-          canvas: '#08090b',
-          surface: '#111214',
-          'surface-hover': '#18191c',
-          'surface-raised': '#1c1d21',
-          border: '#232429',
-          'border-subtle': '#1a1b1f',
-          accent: '#3b82f6',
-          'accent-bright': '#5b9fff',
-          'accent-muted': '#2a4a8f',
-          cyan: '#22d3ee',
+          canvas: '#070708', // Obsidian
+          surface: '#0b0b0d', // Deep black
+          'surface-hover': '#141417',
+          'surface-raised': '#17171b', // Carbon
+          border: '#26262c',
+          'border-subtle': '#1b1b1f',
+          accent: '#d72638', // Signal Red
+          'accent-bright': '#ef3340', // Active Red
+          'accent-muted': '#8f1424', // Deep Crimson
+          steel: '#7c8794', // cool neutral — technical/secondary state only
           emerald: '#34d399',
           warning: '#f0a020',
-          text: '#f2f2f4',
-          'text-secondary': '#9a9ba5',
-          'text-tertiary': '#65666f',
+          text: '#f5f5f6', // cool near-white
+          'text-secondary': '#a7a8b0', // restrained silver
+          'text-tertiary': '#75767f', // accessible graphite-gray
         },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        'glow-accent': '0 0 0 1px rgba(59,130,246,0.15), 0 8px 30px -8px rgba(59,130,246,0.35)',
-        'glow-cyan': '0 0 0 1px rgba(34,211,238,0.12), 0 8px 30px -8px rgba(34,211,238,0.3)',
-        glass: '0 1px 0 0 rgba(255,255,255,0.04) inset, 0 8px 24px -12px rgba(0,0,0,0.6)',
-        elevated: '0 20px 60px -20px rgba(0,0,0,0.7)',
+        'glow-accent': '0 0 0 1px rgba(215,38,56,0.18), 0 8px 30px -8px rgba(215,38,56,0.32)',
+        'glow-steel': '0 0 0 1px rgba(124,135,148,0.12), 0 8px 30px -8px rgba(124,135,148,0.25)',
+        glass: '0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.7)',
+        elevated: '0 20px 60px -20px rgba(0,0,0,0.8)',
       },
       backgroundImage: {
-        'atlas-radial': 'radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12), transparent 60%)',
+        // Restrained — a single low-opacity crimson wash at the top of
+        // the canvas, not a colored background. Precision-grid texture
+        // (globals.css) supplies the "instrument" feel instead of a
+        // second gradient layer competing for attention.
+        'atlas-radial': 'radial-gradient(circle at 50% 0%, rgba(215,38,56,0.10), transparent 60%)',
         'atlas-mesh':
-          'radial-gradient(circle at 15% 20%, rgba(59,130,246,0.10), transparent 40%), radial-gradient(circle at 85% 0%, rgba(34,211,238,0.08), transparent 40%), radial-gradient(circle at 50% 100%, rgba(52,211,153,0.05), transparent 45%)',
+          'radial-gradient(circle at 15% 20%, rgba(215,38,56,0.07), transparent 40%), radial-gradient(circle at 85% 0%, rgba(124,135,148,0.05), transparent 40%), radial-gradient(circle at 50% 100%, rgba(52,211,153,0.04), transparent 45%)',
       },
       keyframes: {
         shimmer: {

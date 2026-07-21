@@ -20,7 +20,7 @@ const DIRECTIVE_STYLES: Record<string, string> = {
   HOLD: 'border-atlas-border text-atlas-text-secondary',
   REDUCE: 'border-atlas-warning/30 text-atlas-warning',
   SELL: 'border-risk-high/30 text-risk-high',
-  WATCH: 'border-atlas-cyan/30 text-atlas-cyan',
+  WATCH: 'border-atlas-steel/30 text-atlas-steel',
 };
 
 const DIRECTIVE_LABELS: Record<string, string> = {

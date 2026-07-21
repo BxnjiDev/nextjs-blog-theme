@@ -46,7 +46,7 @@ const RUN_STATUS_STYLES: Record<string, string> = {
   SUCCESS: 'bg-risk-low/10 text-risk-low',
   WARNING: 'bg-risk-medium/10 text-risk-medium',
   FAILURE: 'bg-risk-high/10 text-risk-high',
-  RUNNING: 'bg-atlas-cyan/10 text-atlas-cyan',
+  RUNNING: 'bg-atlas-steel/10 text-atlas-steel',
   SKIPPED: 'bg-atlas-surface-raised text-atlas-text-tertiary',
 };
 
@@ -205,7 +205,7 @@ export default async function ConnectionsPage() {
           <div>
             <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Running / failed jobs</p>
             <p className="mt-1 font-mono text-lg">
-              <span className={runningJobs.length > 0 ? 'text-atlas-cyan' : 'text-atlas-text'}>{runningJobs.length} running</span>
+              <span className={runningJobs.length > 0 ? 'text-atlas-steel' : 'text-atlas-text'}>{runningJobs.length} running</span>
               <span className="text-atlas-text-tertiary"> · </span>
               <span className={failedJobs.length > 0 ? 'text-risk-high' : 'text-atlas-text'}>{failedJobs.length} failed</span>
             </p>

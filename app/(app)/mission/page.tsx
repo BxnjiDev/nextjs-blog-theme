@@ -88,14 +88,14 @@ export default function MissionPage() {
       <FadeInView>
         <div className="atlas-glass rounded-2xl p-6">
           <div className="flex items-center gap-2 text-atlas-text-secondary">
-            <Compass size={16} strokeWidth={1.75} className="text-atlas-cyan" />
+            <Compass size={16} strokeWidth={1.75} className="text-atlas-steel" />
             <h2 className="text-sm font-medium text-atlas-text">Atlas Daily — coming soon</h2>
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-tertiary">
             A trading checklist, personal reminders, and calendar integration will live here once that layer is
             built — not before, so nothing on this page pretends to track something it isn&rsquo;t actually
             tracking yet. The portfolio-side content this page will eventually lead with already exists on{' '}
-            <Link href="/briefing" className="text-atlas-cyan underline">
+            <Link href="/briefing" className="text-atlas-steel underline">
               today&rsquo;s Daily Briefing
             </Link>
             .
