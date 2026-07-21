@@ -2,33 +2,31 @@
 
 import { useMemo, useState } from 'react';
 import { computeSimulatedMetrics } from '@/lib/domain/simulatorMetrics';
+import { RISK_COMPONENT_LABELS as RISK_LABELS } from '@/lib/domain/risk';
 import type { SimulatorBaseline } from '@/lib/domain/simulator';
-
-const RISK_LABELS: Record<string, string> = {
-  concentrationRisk: 'Concentration',
-  sectorRisk: 'Sector concentration',
-  volatilityRisk: 'Volatility',
-  betaRisk: 'Beta vs. SPY',
-  drawdownRisk: 'Drawdown',
-  valuationRisk: 'Valuation',
-  earningsRisk: 'Earnings-event proxy',
-  regulatoryRisk: 'Regulatory exposure',
-  liquidityRisk: 'Liquidity',
-  macroRisk: 'Macro sensitivity',
-  newsRisk: 'News/controversy',
-  stalenessRisk: 'Data staleness',
-};
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessSimulation } from '@/lib/intelligence/engine';
 
 export default function SimulatorClient({ baseline }: { baseline: SimulatorBaseline }) {
-  const [shares, setShares] = useState<Record<string, number>>(
-    () => Object.fromEntries(baseline.holdings.map((h) => [h.symbol, h.quantity]))
-  );
+  const originalShares = useMemo(() => Object.fromEntries(baseline.holdings.map((h) => [h.symbol, h.quantity])), [baseline]);
+  const [shares, setShares] = useState<Record<string, number>>(() => originalShares);
 
   const isDirty = baseline.holdings.some((h) => shares[h.symbol] !== h.quantity);
 
   const { risk, health, sectorWeights, hypotheticalCash, largestPosition } = useMemo(
     () => computeSimulatedMetrics(baseline, shares),
     [baseline, shares]
+  );
+
+  // The un-edited baseline, recomputed through the same pure function —
+  // not persisted or fetched separately — so assessSimulation() below can
+  // diff "what you have" against "what you're proposing" using the exact
+  // same math (lib/domain/risk.ts / portfolioHealth.ts) as everywhere else.
+  const baselineMetrics = useMemo(() => computeSimulatedMetrics(baseline, originalShares), [baseline, originalShares]);
+
+  const simulationInsights = useMemo(
+    () => (isDirty ? assessSimulation(baselineMetrics.risk, risk, baselineMetrics.health, health) : []),
+    [isDirty, baselineMetrics, risk, health]
   );
 
   const largestRiskEntry = Object.entries(RISK_LABELS)
@@ -130,6 +128,17 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
           <code className="rounded bg-atlas-surface-raised px-1">lib/domain/portfolioHealth.ts</code>, the same
           engines behind /risk and /health.
         </p>
+      </div>
+
+      {/* Simulation conclusion — the reallocation's net effect on risk and
+          health, stated directly, ahead of the raw before/after numbers
+          below rather than leaving the subtraction to the reader. */}
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-atlas-text">Simulation conclusion</h2>
+        <InsightStack
+          insights={simulationInsights}
+          emptyMessage={isDirty ? 'This reallocation doesn’t meaningfully change risk or health.' : 'Adjust the hypothetical shares above to see Atlas’s conclusion.'}
+        />
       </div>
 
       <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">

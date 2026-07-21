@@ -1,25 +1,13 @@
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider } from '@/lib/integrations';
 import { getPortfolioOverview } from '@/lib/domain/portfolio';
-import { computePortfolioHealth, type HealthHoldingInput } from '@/lib/domain/portfolioHealth';
+import { computePortfolioHealth, HEALTH_COMPONENT_LABELS, type HealthHoldingInput } from '@/lib/domain/portfolioHealth';
 
 export interface HealthJobResult {
   skipped: boolean;
   overallScore?: number;
   previousScore?: number | null;
 }
-
-const COMPONENT_LABELS: Record<string, string> = {
-  diversificationScore: 'Diversification',
-  qualityScore: 'Quality',
-  growthScore: 'Growth',
-  riskScore: 'Risk',
-  valuationScore: 'Valuation',
-  sectorBalanceScore: 'Sector balance',
-  cashAllocationScore: 'Cash allocation',
-  concentrationScore: 'Concentration',
-  macroExposureScore: 'Macro exposure',
-};
 
 /**
  * Recomputes the portfolio health score from current holdings, the latest
@@ -81,7 +69,7 @@ export async function runPortfolioHealthJob(): Promise<HealthJobResult> {
 
   const improvements: string[] = [];
   const concerns: string[] = [];
-  for (const [key, label] of Object.entries(COMPONENT_LABELS)) {
+  for (const [key, label] of Object.entries(HEALTH_COMPONENT_LABELS)) {
     const current = componentScores[key];
     const previousValue = previous ? (previous as unknown as Record<string, number>)[key] : undefined;
     if (previousValue !== undefined) {

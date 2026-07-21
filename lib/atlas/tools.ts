@@ -104,4 +104,10 @@ export const ATLAS_TOOLS: Anthropic.Tool[] = [
       required: ['symbol'],
     },
   },
+  {
+    name: 'get_todays_focus',
+    description:
+      "Atlas's own prioritized read on what currently matters most: portfolio health, risk, the single highest-confidence pending recommendation, a recent thesis change, near-term earnings, and data-quality context, each scored (importance/confidence/urgency/impact) and ranked. This is the exact same ranking the Home dashboard's \"Today's focus\" shows — use it when asked something like \"what should I pay attention to today\" or \"what's my highest priority\" so the answer matches what the dashboard already says, rather than re-deriving a separate opinion from get_risk/get_recommendations/get_briefing individually.",
+    input_schema: { type: 'object', properties: {} },
+  },
 ];

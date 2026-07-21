@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { compareOpportunities, CASH_BASELINE_SCORE } from '@/lib/domain/compareOpportunities';
 import FadeInView from '@/components/motion/FadeInView';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessComparison } from '@/lib/intelligence/engine';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +70,13 @@ export default async function ComparePage({ searchParams }: { searchParams: { sy
           .
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-6">
+          {/* Key differences — the conclusion the ranked list otherwise
+              leaves the reader to work out for themselves: is #1 a clear
+              lead, or is this too close to call? */}
+          <InsightStack insights={assessComparison(results)} emptyMessage="Not enough symbols to compare — add another to see a conclusion." />
+
+          <div className="space-y-3">
           {results.map((r, i) => (
             <FadeInView key={r.symbol} delay={Math.min(i * 0.05, 0.25)}>
               <div className={`rounded-xl border p-4 ${rankStyle(r.rank)}`}>
@@ -141,6 +149,7 @@ export default async function ComparePage({ searchParams }: { searchParams: { sy
             symbol, it exists so the ranking shows whether each opportunity clears &ldquo;better than doing
             nothing.&rdquo;
           </p>
+          </div>
         </div>
       )}
     </div>

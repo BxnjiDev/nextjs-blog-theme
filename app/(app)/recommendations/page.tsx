@@ -10,6 +10,8 @@ import DecisionPanel from '@/components/recommendations/DecisionPanel';
 import FadeInView from '@/components/motion/FadeInView';
 import { formatPercent } from '@/lib/format';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessRecommendations } from '@/lib/intelligence/engine';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +26,7 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
   // recommendations from any account in the database (see the identical
   // fix on lib/domain/intelligence.ts and app/(app)/holdings/page.tsx).
   const accountId = await getActiveAccountId();
-  const [scorecard, recommendations] = await Promise.all([
+  const [scorecard, recommendations, pendingRecommendations] = await Promise.all([
     prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
     accountId
       ? prisma.recommendation.findMany({
@@ -37,7 +39,21 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
           take: 100,
         })
       : [],
+    // Independent of the `filter` above — the decision-summary insight
+    // reflects real pending state regardless of which decision tab is
+    // selected, so it doesn't disappear or go stale just because the user
+    // is looking at the "rejected" filter.
+    accountId
+      ? prisma.recommendation.findMany({
+          where: { userDecision: 'PENDING', holding: { accountId } },
+          orderBy: { confidenceScore: 'desc' },
+          take: 10,
+          select: { id: true, symbol: true, action: true, confidenceScore: true, dataQualityStatus: true, userDecision: true, generatedAt: true },
+        })
+      : [],
   ]);
+
+  const decisionSummaryInsights = assessRecommendations(pendingRecommendations);
 
   return (
     <div className="space-y-14">
@@ -48,6 +64,17 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
           Every recommendation Atlas has ever generated, permanently — what you did about it, and how it
           performed.
         </p>
+      </FadeInView>
+
+      {/* Decision summary — the single highest-priority pending
+          recommendation, surfaced ahead of the scorecard stats and the
+          full table below, so "what deserves my attention" doesn't require
+          scanning a 100-row table first. */}
+      <FadeInView delay={0.02}>
+        <InsightStack
+          insights={decisionSummaryInsights}
+          emptyMessage="No current recommendations require action."
+        />
       </FadeInView>
 
       {scorecard && (

@@ -8,25 +8,13 @@ import TrendLineChart from '@/components/charts/TrendLineChart';
 import RiskRadar from '@/components/charts/RiskRadar';
 import FadeInView from '@/components/motion/FadeInView';
 import { atlasStateForScore } from '@/lib/theme/tone';
+import { RISK_COMPONENT_LABELS } from '@/lib/domain/risk';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessRisk } from '@/lib/intelligence/engine';
 
 export const dynamic = 'force-dynamic';
 
-const COMPONENT_LABELS: Record<string, string> = {
-  concentrationRisk: 'Concentration',
-  sectorRisk: 'Sector concentration',
-  volatilityRisk: 'Volatility',
-  betaRisk: 'Beta vs. SPY',
-  drawdownRisk: 'Drawdown',
-  valuationRisk: 'Valuation',
-  earningsRisk: 'Earnings-event proxy',
-  regulatoryRisk: 'Regulatory exposure',
-  liquidityRisk: 'Liquidity',
-  macroRisk: 'Macro sensitivity',
-  newsRisk: 'News/controversy',
-  stalenessRisk: 'Data staleness',
-};
-
-// Short labels for the radar's twelve spokes — the full COMPONENT_LABELS
+// Short labels for the radar's twelve spokes — the full RISK_COMPONENT_LABELS
 // names (used in the accessible Meter list below) are too long to sit
 // around a circle without overlapping.
 const RADAR_LABELS: Record<string, string> = {
@@ -50,23 +38,28 @@ export default async function RiskPage() {
   const chartData = history.map((r) => ({ label: r.generatedAt.toLocaleDateString(), value: r.overallScore }));
   const explanation = (risk?.explanation ?? {}) as Record<string, string>;
   const delta = risk?.previousScore != null ? risk.overallScore - risk.previousScore : null;
+  const insights = assessRisk(risk ?? null);
 
   return (
     <div className="space-y-14">
       <FadeInView>
         <h1 className="sr-only">Portfolio risk</h1>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Risk</p>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
-          Every factor is a deterministic calculation (<code className="rounded bg-atlas-surface-raised px-1">lib/domain/risk.ts</code>),
-          scored 0-100, higher meaning riskier — not an AI-generated number. Treat it as one input into a decision,
-          not a verdict.
-        </p>
       </FadeInView>
 
       {!risk ? (
         <EmptyState>No risk assessment generated yet.</EmptyState>
       ) : (
         <>
+          {/* Interpretation before visualization — what's actually driving
+              the score, in plain English, ahead of the orb/trend/radar/
+              meter breakdown below rather than a generic "this is
+              deterministic" disclaimer. The disclaimer itself moved into
+              this insight's "Show why" (confidenceReasoning). */}
+          <FadeInView delay={0.02}>
+            <InsightStack insights={insights} emptyMessage="No risk assessment generated yet." />
+          </FadeInView>
+
           {/* Same orb + value hero language as Home/Portfolio — the orb's
               color reads risk directly (calm green through to attention
               amber/red) instead of a bare number sitting next to a label. */}
@@ -117,7 +110,7 @@ export default async function RiskPage() {
 
           <FadeInView delay={0.1}>
             <div className="grid gap-x-8 gap-y-6 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
-              {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
+              {Object.entries(RISK_COMPONENT_LABELS).map(([key, label]) => (
                 <div key={key}>
                   <Meter label={label} score={(risk as unknown as Record<string, number>)[key]} invert />
                   {explanation[key] && <p className="mt-1 text-xs text-atlas-text-tertiary">{explanation[key]}</p>}

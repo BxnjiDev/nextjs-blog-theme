@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { MessageSquareText, ClipboardCheck, PlusCircle, Newspaper } from 'lucide-react';
 import { getHomeDashboardData } from '@/lib/domain/homeDashboard';
 import { getPerformanceSummary } from '@/lib/domain/performance';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { prisma } from '@/lib/prisma';
 import UpcomingEarningsWidget from '@/components/home/UpcomingEarningsWidget';
-import TodaysFocusWidget from '@/components/home/TodaysFocusWidget';
 import RecentDecisionsWidget from '@/components/home/RecentDecisionsWidget';
 import PerformanceSnapshotWidget from '@/components/home/PerformanceSnapshotWidget';
 import AtlasReadout from '@/components/home/AtlasReadout';
@@ -14,6 +14,9 @@ import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
 import NarrativeSummary from '@/components/home/NarrativeSummary';
 import { buildHomeNarrative } from '@/lib/copy/homeNarrative';
+import SectionHeading from '@/components/ui/SectionHeading';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { buildTodaysFocusInsights } from '@/lib/intelligence/engine';
 
 const PRIMARY_ACTION = { href: '/atlas', label: 'Ask Atlas', icon: MessageSquareText };
 const SECONDARY_ACTIONS = [
@@ -25,7 +28,29 @@ const SECONDARY_ACTIONS = [
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const [data, performance] = await Promise.all([getHomeDashboardData(), getPerformanceSummary()]);
+  const accountId = await getActiveAccountId();
+
+  // The risk read and pending-recommendation list aren't part of
+  // getHomeDashboardData()'s existing contract (that function already
+  // fetches health/status/thesis/earnings/decisions for other widgets) —
+  // both are new, singular, indexed reads added specifically so the
+  // Intelligence Layer's Today's Focus can reason about risk and pending
+  // decisions Home previously had zero visibility into. Mirrors the
+  // existing precedent below (highestConvictionThesis) of page.tsx doing
+  // its own supplementary Prisma reads alongside the aggregation function.
+  const [data, performance, risk, pendingRecommendations] = await Promise.all([
+    getHomeDashboardData(),
+    getPerformanceSummary(),
+    prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    accountId
+      ? prisma.recommendation.findMany({
+          where: { userDecision: 'PENDING', holding: { accountId } },
+          orderBy: { confidenceScore: 'desc' },
+          take: 10,
+          select: { id: true, symbol: true, action: true, confidenceScore: true, dataQualityStatus: true, userDecision: true, generatedAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const highestConvictionThesis = data.highestConviction
     ? await prisma.recommendation.findUnique({
@@ -46,13 +71,22 @@ export default async function HomePage() {
 
   const performanceAvailable = performance.weekly.available || performance.daily.available;
 
+  const earningsWeightBySymbol = Object.fromEntries(
+    (data.portfolio?.holdings ?? []).map((h) => [h.symbol, data.portfolio && data.portfolio.totalValue > 0 ? (h.marketValue / data.portfolio.totalValue) * 100 : 0])
+  );
+  const usingMockData = !data.status.marketData.configured || !data.status.fundamentals.configured;
+
+  const todaysFocusInsights = buildTodaysFocusInsights({
+    portfolioHealth: data.portfolioHealth,
+    risk,
+    recommendations: pendingRecommendations,
+    thesisChange: data.recentThesisChange,
+    earnings: data.upcomingEarnings,
+    earningsWeightBySymbol,
+    usingMockData,
+  });
+
   const orbitNodes: OrbitNode[] = [
-    {
-      id: 'focus',
-      label: "Today",
-      active: data.todaysFocus.length > 0 || data.todaysAvoid.length > 0,
-      content: <TodaysFocusWidget focus={data.todaysFocus} avoid={data.todaysAvoid} variant="plain" />,
-    },
     {
       id: 'earnings',
       label: 'Earnings',
@@ -127,6 +161,25 @@ export default async function HomePage() {
           />
         </FadeInView>
       </div>
+
+      {/* Today's Focus — the Intelligence Layer's cross-domain merge point
+          (lib/intelligence/engine.ts's buildTodaysFocusInsights): health,
+          risk, the highest-confidence pending recommendation, a recent
+          thesis change, near-term earnings, and data-quality context, all
+          scored onto one priority ordering and rendered through the same
+          InsightCard every other page uses. Replaces the old "Today" orbit
+          node, which only echoed the daily briefing's AI narrative text
+          with no scoring, ranking, or "why" — that full narrative still
+          lives at /briefing; this is the deterministic, explainable view. */}
+      <FadeInView delay={0.1}>
+        <SectionHeading className="mb-3">Today&rsquo;s focus</SectionHeading>
+        <InsightStack
+          insights={todaysFocusInsights}
+          limit={4}
+          variant="list"
+          emptyMessage="No meaningful portfolio changes since your last review."
+        />
+      </FadeInView>
 
       {/* Persistent console bar — Ask Atlas given top billing (the actual
           interaction model of this product) rather than four equal-weight

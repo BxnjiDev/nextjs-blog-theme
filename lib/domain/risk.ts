@@ -60,6 +60,24 @@ export interface RiskResult {
   inputs: Record<string, unknown>;
 }
 
+/** The twelve component keys' display labels — one copy, imported by
+ * /risk, the Simulator, and lib/intelligence/engine.ts, which previously
+ * each declared their own identical (or near-identical) copy of this map. */
+export const RISK_COMPONENT_LABELS: Record<string, string> = {
+  concentrationRisk: 'Concentration',
+  sectorRisk: 'Sector concentration',
+  volatilityRisk: 'Volatility',
+  betaRisk: 'Beta vs. SPY',
+  drawdownRisk: 'Drawdown',
+  valuationRisk: 'Valuation',
+  earningsRisk: 'Earnings-event proxy',
+  regulatoryRisk: 'Regulatory exposure',
+  liquidityRisk: 'Liquidity',
+  macroRisk: 'Macro sensitivity',
+  newsRisk: 'News/controversy',
+  stalenessRisk: 'Data staleness',
+};
+
 const CYCLICAL_SECTOR_KEYWORDS = ['semiconductor', 'energy', 'defense', 'aerospace', 'materials', 'industrial'];
 export const REGULATED_SECTOR_KEYWORDS = ['defense', 'energy', 'semiconductor', 'cyber', 'aerospace', 'pharma', 'bank', 'financial'];
 

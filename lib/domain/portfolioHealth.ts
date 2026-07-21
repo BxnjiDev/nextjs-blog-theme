@@ -29,6 +29,21 @@ export interface HealthComponent {
   explanation: string;
 }
 
+/** The nine component keys' display labels — one copy, imported by /health,
+ * generatePortfolioHealth.ts, and lib/intelligence/engine.ts, which
+ * previously each declared their own identical copy of this map. */
+export const HEALTH_COMPONENT_LABELS: Record<string, string> = {
+  diversificationScore: 'Diversification',
+  qualityScore: 'Quality',
+  growthScore: 'Growth',
+  riskScore: 'Risk',
+  valuationScore: 'Valuation',
+  sectorBalanceScore: 'Sector balance',
+  cashAllocationScore: 'Cash allocation',
+  concentrationScore: 'Concentration',
+  macroExposureScore: 'Macro exposure',
+};
+
 export interface PortfolioHealthResult {
   diversificationScore: HealthComponent;
   qualityScore: HealthComponent;

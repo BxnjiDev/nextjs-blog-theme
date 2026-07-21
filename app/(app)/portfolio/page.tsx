@@ -11,6 +11,10 @@ import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import PerformanceChart from '@/components/portfolio/PerformanceChart';
 import PortfolioComposition from '@/components/portfolio/PortfolioComposition';
 import { atlasStateForScore } from '@/lib/theme/tone';
+import SectionHeading from '@/components/ui/SectionHeading';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessPortfolioHealth, assessRisk } from '@/lib/intelligence/engine';
+import { sortByPriority } from '@/lib/intelligence/scoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,12 +22,18 @@ export default async function OverviewPage() {
   // Same latest-RiskAssessment read already used on /connections,
   // generateBriefing, and generatePortfolioHealth — reused here, not
   // recomputed, so Portfolio's "Risk" stat and /risk's own score can never
-  // drift apart.
-  const [overview, performance, latestRisk] = await Promise.all([
+  // drift apart. Full rows (not a narrow select) so the Intelligence
+  // Layer's assessRisk/assessPortfolioHealth can reuse the same
+  // plain-English per-component explanations /risk and /health show,
+  // instead of Portfolio inventing a second, shallower interpretation.
+  const [overview, performance, latestRisk, latestHealth] = await Promise.all([
     getPortfolioOverview(),
     getPerformanceSummary(),
-    prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' }, select: { overallScore: true, previousScore: true } }),
+    prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    prisma.portfolioHealthAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
   ]);
+
+  const portfolioInsights = sortByPriority([...assessPortfolioHealth(latestHealth), ...assessRisk(latestRisk)]);
 
   if (!overview) {
     return (
@@ -84,6 +94,16 @@ export default async function OverviewPage() {
             </p>
           </div>
         </div>
+      </FadeInView>
+
+      {/* Portfolio assessment — the Intelligence Layer's read on health and
+          risk together, reusing the exact explanations /health and /risk
+          show (assessPortfolioHealth/assessRisk in lib/intelligence/engine.ts)
+          rather than Portfolio inventing its own second interpretation of
+          the same two scores. */}
+      <FadeInView delay={0.03}>
+        <SectionHeading className="mb-3">Portfolio assessment</SectionHeading>
+        <InsightStack insights={portfolioInsights} variant="list" emptyMessage="No health or risk assessment generated yet." />
       </FadeInView>
 
       {/* Thin analytics strip — plain label/value pairs separated by

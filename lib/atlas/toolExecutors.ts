@@ -7,6 +7,7 @@ import { getSimulatorBaseline } from '@/lib/domain/simulator';
 import { computeSimulatedMetrics } from '@/lib/domain/simulatorMetrics';
 import { buildMemoryContext } from '@/lib/domain/memory';
 import { normalizeBriefingPortfolioSummary, normalizeBriefingMarketRecap, normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
+import { getTodaysFocus } from '@/lib/intelligence/todaysFocus';
 import { toJsonSafe } from './serialize';
 
 export interface ToolResult {
@@ -143,6 +144,12 @@ async function simulate(input: { changes: { symbol: string; quantity: number }[]
   };
 }
 
+async function todaysFocus() {
+  const insights = await getTodaysFocus();
+  if (insights.length === 0) return { insights: [], note: 'No meaningful portfolio changes since your last review — nothing rises above routine right now.' };
+  return { insights };
+}
+
 async function recallMemory(input: { symbol: string }) {
   const symbol = input.symbol.toUpperCase();
   const accountId = await getActiveAccountId();
@@ -163,6 +170,7 @@ const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   compare: compare,
   simulate: simulate,
   recall_memory: recallMemory,
+  get_todays_focus: todaysFocus,
 };
 
 /** The one place a tool name (as chosen by Claude) turns into an actual

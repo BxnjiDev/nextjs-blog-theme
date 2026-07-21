@@ -5,6 +5,9 @@ import { getActiveAccountId } from '@/lib/domain/portfolio';
 import FadeInView from '@/components/motion/FadeInView';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
+import SectionHeading from '@/components/ui/SectionHeading';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessTimelineNotable } from '@/lib/intelligence/engine';
 import { TIMELINE_TYPE_TONE, TONE_DOT } from '@/lib/theme/tone';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +24,10 @@ export default async function TimelinePage({ searchParams }: { searchParams: { s
 
   const symbol = searchParams.symbol && searchParams.symbol !== 'ALL' ? searchParams.symbol : undefined;
   const entries = await getPortfolioTimeline({ symbol });
+  // Reuses the same `entries` this page already fetched — no second query —
+  // to rank the handful of events that actually represent a change in
+  // judgment or position, ahead of scrolling the full river to find them.
+  const notableInsights = assessTimelineNotable(entries);
 
   return (
     <div className="space-y-10">
@@ -30,6 +37,11 @@ export default async function TimelinePage({ searchParams }: { searchParams: { s
           Every sync, recommendation, trade, thesis update, conviction/risk/health change, material news item, and
           earnings event, merged into one chronological river.
         </p>
+      </FadeInView>
+
+      <FadeInView delay={0.03}>
+        <SectionHeading className="mb-3">Notable this period</SectionHeading>
+        <InsightStack insights={notableInsights} variant="list" emptyMessage="No standout events since your last review — mostly routine activity." />
       </FadeInView>
 
       <FadeInView delay={0.05}>

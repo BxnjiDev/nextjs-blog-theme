@@ -218,3 +218,23 @@ export function atlasStateForScore(score: number | null, invert = false): 'ready
   if (tone === 'warning') return 'idle';
   return 'attention';
 }
+
+/** Intelligence Layer priority tiers (lib/intelligence/) — a distinct
+ * vocabulary from every tone map above: those describe whether a *value*
+ * is good or bad, this describes how much *attention* an insight deserves
+ * regardless of whether its content is good or bad news. A "critical"
+ * insight can be good news delivered urgently (a thesis just cleared for
+ * a large add) as easily as bad. */
+export const INSIGHT_TIER_TONE: Record<string, Tone> = {
+  critical: 'negative',
+  high: 'warning',
+  medium: 'info',
+  low: 'muted',
+};
+
+export const INSIGHT_TIER_LABEL: Record<string, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};

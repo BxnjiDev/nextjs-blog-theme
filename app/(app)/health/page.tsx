@@ -8,20 +8,11 @@ import TrendLineChart from '@/components/charts/TrendLineChart';
 import RiskRadar from '@/components/charts/RiskRadar';
 import FadeInView from '@/components/motion/FadeInView';
 import { atlasStateForScore } from '@/lib/theme/tone';
+import { HEALTH_COMPONENT_LABELS } from '@/lib/domain/portfolioHealth';
+import InsightStack from '@/components/intelligence/InsightStack';
+import { assessPortfolioHealth } from '@/lib/intelligence/engine';
 
 export const dynamic = 'force-dynamic';
-
-const COMPONENT_LABELS: Record<string, string> = {
-  diversificationScore: 'Diversification',
-  qualityScore: 'Quality',
-  growthScore: 'Growth',
-  riskScore: 'Risk (inverted)',
-  valuationScore: 'Valuation',
-  sectorBalanceScore: 'Sector balance',
-  cashAllocationScore: 'Cash allocation',
-  concentrationScore: 'Concentration (inverted)',
-  macroExposureScore: 'Macro exposure (inverted)',
-};
 
 const RADAR_LABELS: Record<string, string> = {
   diversificationScore: 'Diversification',
@@ -43,22 +34,26 @@ export default async function HealthPage() {
   const latest = history[history.length - 1];
   const chartData = history.map((h) => ({ label: h.generatedAt.toLocaleDateString(), value: h.overallScore }));
   const delta = latest?.previousScore != null ? latest.overallScore - latest.previousScore : null;
+  const insights = assessPortfolioHealth(latest ?? null);
 
   return (
     <div className="space-y-14">
       <FadeInView>
         <h1 className="sr-only">Portfolio health</h1>
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Health</p>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
-          Deterministic composite score (0-100, higher is healthier) across diversification, quality, growth, risk,
-          valuation, sector balance, cash allocation, concentration, and macro exposure.
-        </p>
       </FadeInView>
 
       {!latest ? (
         <EmptyState>No health assessment generated yet.</EmptyState>
       ) : (
         <>
+          {/* Interpretation before visualization, mirroring /risk's
+              treatment — Risk and Health are structural siblings in this
+              app, so they should read as one language, not two. */}
+          <FadeInView delay={0.02}>
+            <InsightStack insights={insights} emptyMessage="No health assessment generated yet." />
+          </FadeInView>
+
           {/* Same orb + value hero language as Home/Portfolio/Risk — the
               orb's color reads health directly instead of a bare number. */}
           <FadeInView delay={0.05}>
@@ -106,7 +101,7 @@ export default async function HealthPage() {
 
           <FadeInView delay={0.1}>
             <div className="grid gap-x-8 gap-y-6 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
-              {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
+              {Object.entries(HEALTH_COMPONENT_LABELS).map(([key, label]) => (
                 <Meter key={key} label={label} score={(latest as unknown as Record<string, number>)[key]} />
               ))}
             </div>
