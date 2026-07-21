@@ -37,7 +37,7 @@ body {
    plus a soft glow, never a hard color fill (per the "no flashy crypto
    dashboard" brief). Pair with a transition-* utility on the element. */
 .atlas-hover-glow:hover {
-  border-color: rgba(215, 38, 56, 0.32);
+  border-color: rgba(139, 92, 246, 0.35);
   box-shadow: theme('boxShadow.glow-accent');
   transform: translateY(-2px);
 }
