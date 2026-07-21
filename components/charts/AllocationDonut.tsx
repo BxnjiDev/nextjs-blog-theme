@@ -40,7 +40,8 @@ export default function AllocationDonut({ data, height = 220 }: { data: Allocati
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8, background: '#111214', border: '1px solid #232429', color: '#f2f2f4' }}
+          contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: '#111214', border: '1px solid #232429', color: '#f2f2f4' }}
+          itemStyle={{ color: '#f2f2f4' }}
           formatter={(value, name) => [`${Number(value).toFixed(1)}%`, name]}
         />
       </PieChart>
