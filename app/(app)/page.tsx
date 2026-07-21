@@ -14,6 +14,7 @@ import PerformanceSnapshotWidget from '@/components/home/PerformanceSnapshotWidg
 import RecommendationCard from '@/components/RecommendationCard';
 import WidgetCard from '@/components/home/WidgetCard';
 import AutoRefresh from '@/components/AutoRefresh';
+import FadeInView from '@/components/motion/FadeInView';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,14 +45,10 @@ export default async function HomePage() {
   return (
     <div className="space-y-8">
       <AutoRefresh />
-      <div>
-        <h1 className="text-2xl font-semibold text-atlas-text">
-          {data.greeting}
-        </h1>
-        <p className="mt-1 text-sm text-atlas-text-secondary">
-          Here&rsquo;s what deserves your attention right now.
-        </p>
-      </div>
+      <FadeInView>
+        <h1 className="text-3xl font-semibold tracking-tight text-atlas-text">{data.greeting}</h1>
+        <p className="mt-1.5 text-sm text-atlas-text-secondary">Here&rsquo;s what deserves your attention right now.</p>
+      </FadeInView>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatWidget
@@ -59,11 +56,15 @@ export default async function HomePage() {
           value={data.portfolioHealth ? `${data.portfolioHealth.overallScore}/100` : 'No data'}
           sublabel={data.portfolioHealth?.previousScore != null ? `Previously ${data.portfolioHealth.previousScore}/100` : undefined}
           tone={data.portfolioHealth && data.portfolioHealth.overallScore >= 60 ? 'positive' : data.portfolioHealth ? 'negative' : 'neutral'}
+          numericValue={data.portfolioHealth ? data.portfolioHealth.overallScore : undefined}
+          format={data.portfolioHealth ? 'score100' : undefined}
         />
         <StatWidget
           title="Cash available"
           value={data.portfolio ? formatCurrency(data.portfolio.cashBalance) : 'No data'}
           sublabel={data.portfolio ? `of ${formatCurrency(data.portfolio.totalValue)} total` : undefined}
+          numericValue={data.portfolio ? data.portfolio.cashBalance : undefined}
+          format={data.portfolio ? 'currency0' : undefined}
         />
         <MarketStatusWidget market={data.market} />
         <LatestSyncWidget sync={data.status.robinhoodSync} />

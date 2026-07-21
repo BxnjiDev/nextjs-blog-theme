@@ -12,10 +12,47 @@ body {
 
 /* Atlas OS v1 shell chrome sits on its own near-black canvas rather than
    the gray-950 existing pages use — a deliberately slightly deeper base so
-   the sidebar/topbar read as "frame" and page content reads as "surface". */
+   the sidebar/topbar read as "frame" and page content reads as "surface".
+   The mesh gradient is fixed (not scrolled) and extremely low-opacity —
+   ambient depth, not a visible "background image". */
 .atlas-shell {
   background-color: theme('colors.atlas.canvas');
+  background-image: theme('backgroundImage.atlas-mesh');
+  background-attachment: fixed;
   color: theme('colors.atlas.text');
+}
+
+/* Glass card: the one visual primitive every elevated surface in Atlas OS
+   (widget cards, modals, the login panel) shares, so "glass" reads as one
+   consistent material rather than each component inventing its own blur. */
+.atlas-glass {
+  background-color: rgba(17, 18, 20, 0.6);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid theme('colors.atlas.border');
+  box-shadow: theme('boxShadow.glass');
+}
+
+/* Hover elevation used on interactive cards — a hairline accent border
+   plus a soft glow, never a hard color fill (per the "no flashy crypto
+   dashboard" brief). Pair with a transition-* utility on the element. */
+.atlas-hover-glow:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: theme('boxShadow.glow-accent');
+  transform: translateY(-2px);
+}
+
+/* Skeleton/shimmer loading state — used sparingly, only while real data is
+   in flight, never as a permanent decoration. */
+.atlas-shimmer {
+  background: linear-gradient(
+    90deg,
+    theme('colors.atlas.surface-raised') 0%,
+    theme('colors.atlas.surface-hover') 50%,
+    theme('colors.atlas.surface-raised') 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.8s linear infinite;
 }
 
 .atlas-scrollbar {
