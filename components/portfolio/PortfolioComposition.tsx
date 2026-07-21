@@ -43,7 +43,7 @@ export default function PortfolioComposition({ holdings, totalValue, cashBalance
                   disabled={!isHolding}
                   onClick={() => isHolding && toggle(s.label)}
                   aria-pressed={active}
-                  className={`flex w-full items-center justify-between rounded-md px-1.5 py-1 text-xs transition-colors ${
+                  className={`atlas-press flex w-full items-center justify-between rounded-md px-1.5 py-1 text-xs transition-colors ${
                     isHolding ? 'cursor-pointer hover:bg-atlas-surface-hover' : 'cursor-default'
                   } ${active ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-secondary'}`}
                 >

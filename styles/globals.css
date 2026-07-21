@@ -86,6 +86,20 @@ body {
   background-color: theme('colors.atlas.accent / 35%');
 }
 
+/* Shared press feedback for buttons/rows that don't already animate via
+   Framer Motion (the allocation legend, period toggle, quick actions,
+   holdings rows) — a tiny scale-down on press so the interface confirms
+   the tap instantly, not just on the eventual state change. Gated behind
+   no-preference so reduced-motion users get none of it. */
+@media (prefers-reduced-motion: no-preference) {
+  .atlas-press {
+    transition: transform 0.12s ease-out;
+  }
+  .atlas-press:active {
+    transform: scale(0.97);
+  }
+}
+
 /* One consistent keyboard-focus treatment for every interactive element
    in the app, instead of the browser's default blue outline on some
    controls and nothing at all on others (most of the ~10 secondary pages

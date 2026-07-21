@@ -55,7 +55,7 @@ export default function PerformanceChart({ history }: { history: PerformanceHist
               type="button"
               onClick={() => setPeriod(p)}
               aria-pressed={period === p}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`atlas-press rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 period === p ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-tertiary hover:text-atlas-text-secondary'
               }`}
             >

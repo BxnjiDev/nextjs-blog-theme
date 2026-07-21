@@ -102,7 +102,7 @@ export default function HoldingsTable({
           type="button"
           onClick={() => setCompact((v) => !v)}
           aria-pressed={compact}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-atlas-text-tertiary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text-secondary"
+          className="atlas-press flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-atlas-text-tertiary transition-colors hover:bg-atlas-surface-hover hover:text-atlas-text-secondary"
         >
           {compact ? <Rows3 size={13} strokeWidth={1.75} aria-hidden="true" /> : <Rows2 size={13} strokeWidth={1.75} aria-hidden="true" />}
           {compact ? 'Comfortable' : 'Compact'}
@@ -238,7 +238,7 @@ export default function HoldingsTable({
                 type="button"
                 onClick={() => setExpandedId(expanded ? null : h.id)}
                 aria-expanded={expanded}
-                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+                className="atlas-press flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
               >
                 <div>
                   <p className="font-medium text-atlas-text">{h.symbol}</p>

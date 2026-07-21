@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getPortfolioOverview } from '@/lib/domain/portfolio';
 import { getPerformanceSummary } from '@/lib/domain/performance';
+import { prisma } from '@/lib/prisma';
 import { formatCurrency, formatPercent, formatRelativeTime } from '@/lib/format';
 import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
@@ -11,7 +12,15 @@ import PortfolioComposition from '@/components/portfolio/PortfolioComposition';
 export const dynamic = 'force-dynamic';
 
 export default async function OverviewPage() {
-  const [overview, performance] = await Promise.all([getPortfolioOverview(), getPerformanceSummary()]);
+  // Same latest-RiskAssessment read already used on /connections,
+  // generateBriefing, and generatePortfolioHealth — reused here, not
+  // recomputed, so Portfolio's "Risk" stat and /risk's own score can never
+  // drift apart.
+  const [overview, performance, latestRisk] = await Promise.all([
+    getPortfolioOverview(),
+    getPerformanceSummary(),
+    prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' }, select: { overallScore: true, previousScore: true } }),
+  ]);
 
   if (!overview) {
     return (
@@ -80,10 +89,23 @@ export default async function OverviewPage() {
             <p className="mt-1 font-mono text-lg text-atlas-text">{overview.holdings.length}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Largest position</p>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Concentration</p>
             <p className="mt-1 font-mono text-lg text-atlas-text">
               {overview.largestWinner ? `${overview.largestWinner.symbol} ${concentrationPct.toFixed(1)}%` : <span className="text-atlas-text-tertiary">—</span>}
             </p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Portfolio risk</p>
+            {latestRisk ? (
+              <p className={`mt-1 font-mono text-lg ${latestRisk.overallScore < 40 ? 'text-risk-low' : latestRisk.overallScore < 70 ? 'text-risk-medium' : 'text-risk-high'}`}>
+                {latestRisk.overallScore}/100{' '}
+                <Link href="/risk" className="text-xs text-atlas-text-tertiary underline decoration-atlas-border hover:decoration-atlas-text-secondary">
+                  detail →
+                </Link>
+              </p>
+            ) : (
+              <p className="mt-1 font-mono text-lg text-atlas-text-tertiary">No data</p>
+            )}
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Largest mover</p>

@@ -172,7 +172,7 @@ export default async function HomePage() {
           <Link
             key={href}
             href={href}
-            className="flex items-center gap-2 rounded-lg border border-atlas-border px-3.5 py-2 text-sm text-atlas-text-secondary transition-colors hover:border-atlas-accent-bright/40 hover:bg-atlas-surface-hover hover:text-atlas-text"
+            className="atlas-press flex items-center gap-2 rounded-lg border border-atlas-border px-3.5 py-2 text-sm text-atlas-text-secondary transition-colors hover:border-atlas-accent-bright/40 hover:bg-atlas-surface-hover hover:text-atlas-text"
           >
             <Icon size={15} strokeWidth={1.75} />
             {label}

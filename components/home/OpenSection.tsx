@@ -49,7 +49,7 @@ export default function OpenSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="mb-5 flex w-full items-center justify-between text-left"
+        className="atlas-press mb-5 flex w-full items-center justify-between text-left"
       >
         <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">{title}</h2>
         <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: MOTION.duration.micro }}>
