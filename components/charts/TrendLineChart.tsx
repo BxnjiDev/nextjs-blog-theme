@@ -9,7 +9,7 @@ export interface TrendPoint {
 
 export default function TrendLineChart({
   data,
-  color = '#2563eb',
+  color = '#5b9fff',
   height = 160,
   domain,
 }: {
@@ -20,7 +20,7 @@ export default function TrendLineChart({
 }) {
   if (data.length < 2) {
     return (
-      <div className="flex h-[160px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+      <div className="flex h-[160px] items-center justify-center text-sm text-atlas-text-tertiary">
         Not enough history yet for a trend chart.
       </div>
     );
@@ -29,14 +29,13 @@ export default function TrendLineChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-        <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.5} />
-        <YAxis tick={{ fontSize: 11 }} stroke="currentColor" opacity={0.5} domain={domain ?? ['auto', 'auto']} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#65666f' }} stroke="#232429" />
+        <YAxis tick={{ fontSize: 11, fill: '#65666f' }} stroke="#232429" domain={domain ?? ['auto', 'auto']} />
         <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8 }}
-          labelStyle={{ fontWeight: 600 }}
-          wrapperClassName="!bg-white dark:!bg-gray-900"
+          contentStyle={{ fontSize: 12, borderRadius: 8, background: '#111214', border: '1px solid #232429', color: '#f2f2f4' }}
+          labelStyle={{ fontWeight: 600, color: '#f2f2f4' }}
         />
-        <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+        <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} isAnimationActive animationDuration={900} />
       </LineChart>
     </ResponsiveContainer>
   );

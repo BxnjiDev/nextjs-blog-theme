@@ -1,3 +1,7 @@
+'use client';
+
+import { motion } from 'framer-motion';
+
 export default function RiskGauge({
   label,
   score,
@@ -23,11 +27,17 @@ export default function RiskGauge({
   return (
     <div>
       <div className="flex justify-between text-sm">
-        <span className="text-gray-700 dark:text-gray-300">{label}</span>
-        <span className="font-medium text-gray-900 dark:text-gray-100">{score}/100</span>
+        <span className="text-atlas-text-secondary">{label}</span>
+        <span className="font-mono text-atlas-text">{score}/100</span>
       </div>
-      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-        <div className={`h-full ${tone}`} style={{ width: `${score}%` }} />
+      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-atlas-border">
+        <motion.div
+          initial={{ width: 0 }}
+          whileInView={{ width: `${score}%` }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className={`h-full rounded-full ${tone}`}
+        />
       </div>
     </div>
   );

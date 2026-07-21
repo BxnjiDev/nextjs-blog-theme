@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import RiskGauge from '@/components/RiskGauge';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+import FadeInView from '@/components/motion/FadeInView';
+import AnimatedNumber from '@/components/motion/AnimatedNumber';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,49 +28,58 @@ export default async function RiskPage() {
   const explanation = (risk?.explanation ?? {}) as Record<string, string>;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Risk Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Every factor is a deterministic calculation (see lib/domain/risk.ts), scored 0-100, higher meaning
-          riskier — not an AI-generated number. Treat it as one input into a decision, not a verdict.
+    <div className="space-y-12">
+      <FadeInView>
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Risk</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-atlas-text">Portfolio risk</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
+          Every factor is a deterministic calculation (<code className="rounded bg-atlas-surface-raised px-1">lib/domain/risk.ts</code>),
+          scored 0-100, higher meaning riskier — not an AI-generated number. Treat it as one input into a decision,
+          not a verdict.
         </p>
-      </div>
+      </FadeInView>
 
       {!risk ? (
-        <p className="text-sm text-gray-500">No risk assessment generated yet.</p>
+        <p className="text-sm text-atlas-text-tertiary">No risk assessment generated yet.</p>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
-              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Overall portfolio risk score
-              </p>
-              <p className="mt-1 text-4xl font-semibold">{risk.overallScore}/100</p>
-              {risk.previousScore !== null && (
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Previous: {risk.previousScore} ({risk.overallScore - risk.previousScore >= 0 ? '+' : ''}
-                  {risk.overallScore - risk.previousScore})
-                </p>
-              )}
-              {risk.notes && <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{risk.notes}</p>}
-            </div>
-            <div className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
-              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Trend</p>
-              <TrendLineChart data={chartData} domain={[0, 100]} color="#dc2626" />
-            </div>
-          </div>
-
-          <div className="grid gap-4 rounded-lg border border-gray-200 p-5 dark:border-gray-800 md:grid-cols-2">
-            {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
-              <div key={key}>
-                <RiskGauge label={label} score={(risk as unknown as Record<string, number>)[key]} />
-                {explanation[key] && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{explanation[key]}</p>}
+          <FadeInView delay={0.05}>
+            <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Overall risk score</p>
+                <AnimatedNumber value={risk.overallScore} format="integer" className="mt-1 block text-5xl font-semibold text-atlas-text" />
+                <p className="mt-1 text-xs text-atlas-text-tertiary">/100</p>
+                {risk.previousScore !== null && (
+                  <p className="mt-2 text-sm text-atlas-text-secondary">
+                    Previous: {risk.previousScore} (
+                    <span className={risk.overallScore - risk.previousScore <= 0 ? 'text-risk-low' : 'text-risk-high'}>
+                      {risk.overallScore - risk.previousScore >= 0 ? '+' : ''}
+                      {risk.overallScore - risk.previousScore}
+                    </span>
+                    )
+                  </p>
+                )}
+                {risk.notes && <p className="mt-2 text-sm leading-relaxed text-atlas-text-secondary">{risk.notes}</p>}
               </div>
-            ))}
-          </div>
+              <div>
+                <p className="mb-2 text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Trend</p>
+                <TrendLineChart data={chartData} domain={[0, 100]} color="#f0a020" />
+              </div>
+            </div>
+          </FadeInView>
 
-          <p className="text-xs text-gray-500 dark:text-gray-400">Generated {risk.generatedAt.toLocaleString()}</p>
+          <FadeInView delay={0.1}>
+            <div className="grid gap-x-8 gap-y-6 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
+              {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
+                <div key={key}>
+                  <RiskGauge label={label} score={(risk as unknown as Record<string, number>)[key]} />
+                  {explanation[key] && <p className="mt-1 text-xs text-atlas-text-tertiary">{explanation[key]}</p>}
+                </div>
+              ))}
+            </div>
+          </FadeInView>
+
+          <p className="text-xs text-atlas-text-tertiary">Generated {risk.generatedAt.toLocaleString()}</p>
         </>
       )}
     </div>

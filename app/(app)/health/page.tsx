@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import RiskGauge from '@/components/RiskGauge';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+import FadeInView from '@/components/motion/FadeInView';
+import AnimatedNumber from '@/components/motion/AnimatedNumber';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,67 +24,76 @@ export default async function HealthPage() {
     take: 90,
   });
   const latest = history[history.length - 1];
-
   const chartData = history.map((h) => ({ label: h.generatedAt.toLocaleDateString(), value: h.overallScore }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Portfolio Health</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+    <div className="space-y-12">
+      <FadeInView>
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Health</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-atlas-text">Portfolio health</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
           Deterministic composite score (0-100, higher is healthier) across diversification, quality, growth, risk,
           valuation, sector balance, cash allocation, concentration, and macro exposure.
         </p>
-      </div>
+      </FadeInView>
 
       {!latest ? (
-        <p className="text-sm text-gray-500">No health assessment generated yet.</p>
+        <p className="text-sm text-atlas-text-tertiary">No health assessment generated yet.</p>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
-              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Overall health score</p>
-              <p className="mt-1 text-4xl font-semibold">{latest.overallScore}/100</p>
-              {latest.previousScore !== null && (
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Previous: {latest.previousScore} ({latest.overallScore - latest.previousScore >= 0 ? '+' : ''}
-                  {latest.overallScore - latest.previousScore})
-                </p>
-              )}
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Generated {latest.generatedAt.toLocaleString()}
-              </p>
+          <FadeInView delay={0.05}>
+            <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Overall health score</p>
+                <AnimatedNumber value={latest.overallScore} format="integer" className="mt-1 block text-5xl font-semibold text-atlas-text" />
+                <p className="mt-1 text-xs text-atlas-text-tertiary">/100</p>
+                {latest.previousScore !== null && (
+                  <p className="mt-2 text-sm text-atlas-text-secondary">
+                    Previous: {latest.previousScore} (
+                    <span className={latest.overallScore - latest.previousScore >= 0 ? 'text-risk-low' : 'text-risk-high'}>
+                      {latest.overallScore - latest.previousScore >= 0 ? '+' : ''}
+                      {latest.overallScore - latest.previousScore}
+                    </span>
+                    )
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-atlas-text-tertiary">Generated {latest.generatedAt.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="mb-2 text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Trend</p>
+                <TrendLineChart data={chartData} domain={[0, 100]} color="#34d399" />
+              </div>
             </div>
-            <div className="rounded-lg border border-gray-200 p-5 dark:border-gray-800">
-              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Trend</p>
-              <TrendLineChart data={chartData} domain={[0, 100]} color="#16a34a" />
-            </div>
-          </div>
+          </FadeInView>
 
-          <div className="grid gap-4 rounded-lg border border-gray-200 p-5 dark:border-gray-800 md:grid-cols-2">
-            {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
-              <RiskGauge key={key} label={label} score={(latest as unknown as Record<string, number>)[key]} invert />
-            ))}
-          </div>
+          <FadeInView delay={0.1}>
+            <div className="grid gap-x-8 gap-y-6 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
+              {Object.entries(COMPONENT_LABELS).map(([key, label]) => (
+                <RiskGauge key={key} label={label} score={(latest as unknown as Record<string, number>)[key]} invert />
+              ))}
+            </div>
+          </FadeInView>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="mb-2 font-medium text-risk-low">Top improvements</h2>
-              <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                {(latest.topImprovements as string[]).map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
+          <FadeInView delay={0.15}>
+            <div className="grid gap-8 border-t border-atlas-border-subtle pt-8 md:grid-cols-2">
+              <div>
+                <h2 className="mb-2 text-sm font-medium text-atlas-emerald">Top improvements</h2>
+                <ul className="space-y-1.5 text-sm text-atlas-text-secondary">
+                  {(latest.topImprovements as string[]).map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h2 className="mb-2 text-sm font-medium text-risk-high">Top concerns</h2>
+                <ul className="space-y-1.5 text-sm text-atlas-text-secondary">
+                  {(latest.topConcerns as string[]).map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="mb-2 font-medium text-risk-high">Top concerns</h2>
-              <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                {(latest.topConcerns as string[]).map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          </FadeInView>
         </>
       )}
     </div>
