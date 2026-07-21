@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth/password';
-import { signSessionToken, SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE } from '@/lib/auth/session';
+import { signSessionToken, SESSION_COOKIE_NAME, getSessionCookieOptions } from '@/lib/auth/session';
 
 /** The only credential check in the app. Deliberately vague on failure
  * ("Invalid email or password" for both a wrong email and a wrong password)
@@ -32,13 +32,7 @@ export async function login(formData: FormData): Promise<void> {
   }
 
   const token = await signSessionToken({ userId: user.id, email: user.email });
-  cookies().set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_COOKIE_MAX_AGE,
-  });
+  cookies().set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
 
   redirect('/');
 }

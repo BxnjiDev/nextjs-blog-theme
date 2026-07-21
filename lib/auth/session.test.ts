@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { signSessionToken, verifySessionToken } from './session';
+import { signSessionToken, verifySessionToken, getSessionCookieOptions } from './session';
 
 describe('session token signing/verification (Atlas OS auth)', () => {
   beforeAll(() => {
@@ -28,5 +28,29 @@ describe('session token signing/verification (Atlas OS auth)', () => {
     process.env.AUTH_SECRET = 'a-completely-different-secret-value';
     expect(await verifySessionToken(token)).toBeNull();
     process.env.AUTH_SECRET = 'test-secret-at-least-16-chars-long';
+  });
+});
+
+describe('session cookie options (overnight: browser-session-scoped login)', () => {
+  it('sets httpOnly, sameSite=lax, and path=/', () => {
+    const opts = getSessionCookieOptions();
+    expect(opts.httpOnly).toBe(true);
+    expect(opts.sameSite).toBe('lax');
+    expect(opts.path).toBe('/');
+  });
+
+  it('never sets maxAge or expires — a persistent cookie would survive closing the browser, defeating the "login required for every new browser session" requirement', () => {
+    const opts = getSessionCookieOptions();
+    expect(opts).not.toHaveProperty('maxAge');
+    expect(opts).not.toHaveProperty('expires');
+  });
+
+  it('marks the cookie secure only in production, so it still works over plain HTTP in local dev', () => {
+    const originalEnv = process.env.NODE_ENV;
+    (process.env as { NODE_ENV?: string }).NODE_ENV = 'production';
+    expect(getSessionCookieOptions().secure).toBe(true);
+    (process.env as { NODE_ENV?: string }).NODE_ENV = 'test';
+    expect(getSessionCookieOptions().secure).toBe(false);
+    (process.env as { NODE_ENV?: string }).NODE_ENV = originalEnv;
   });
 });
