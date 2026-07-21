@@ -1,3 +1,7 @@
+'use client';
+
+import { StaggerGroup, StaggerItem } from '@/components/motion/Stagger';
+
 const SUGGESTIONS = [
   'Morning Brief',
   'Review Portfolio',
@@ -9,17 +13,18 @@ const SUGGESTIONS = [
 
 export default function SuggestedPrompts({ onSelect }: { onSelect: (prompt: string) => void }) {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <StaggerGroup className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {SUGGESTIONS.map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => onSelect(s)}
-          className="rounded-lg border border-atlas-border bg-atlas-surface px-3 py-2.5 text-left text-sm text-atlas-text-secondary transition-colors hover:border-atlas-accent/40 hover:bg-atlas-surface-hover hover:text-atlas-text"
-        >
-          {s}
-        </button>
+        <StaggerItem key={s}>
+          <button
+            type="button"
+            onClick={() => onSelect(s)}
+            className="atlas-hover-glow w-full rounded-lg border border-atlas-border bg-atlas-surface px-3 py-2.5 text-left text-sm text-atlas-text-secondary transition-[border-color,box-shadow,transform,color] duration-300 hover:text-atlas-text"
+          >
+            {s}
+          </button>
+        </StaggerItem>
       ))}
-    </div>
+    </StaggerGroup>
   );
 }

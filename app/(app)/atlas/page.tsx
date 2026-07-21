@@ -26,7 +26,8 @@ export default async function AtlasPage({ searchParams }: { searchParams: { c?: 
   ]);
 
   return (
-    <div className="flex h-[80vh] min-h-[560px] overflow-hidden rounded-xl border border-atlas-border bg-atlas-surface/40">
+    <div className="atlas-glass relative flex h-[82vh] min-h-[560px] overflow-hidden rounded-2xl">
+      <div className="pointer-events-none absolute inset-0 bg-atlas-radial opacity-60" />
       <ConversationList conversations={conversations} activeId={activeConversation?.id} />
       <AtlasChatClient
         key={activeConversation?.id ?? 'new'}

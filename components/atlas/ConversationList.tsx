@@ -11,7 +11,7 @@ export interface ConversationListItem {
 
 export default function ConversationList({ conversations, activeId }: { conversations: ConversationListItem[]; activeId?: string }) {
   return (
-    <div className="flex h-full w-56 shrink-0 flex-col border-r border-atlas-border">
+    <div className="relative flex h-full w-56 shrink-0 flex-col border-r border-atlas-border-subtle">
       <div className="p-3">
         <Link
           href="/atlas"
