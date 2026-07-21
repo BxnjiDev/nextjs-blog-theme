@@ -1,8 +1,16 @@
 import WidgetCard from './WidgetCard';
 
-export default function TodaysFocusWidget({ focus, avoid }: { focus: string[]; avoid: string[] }) {
+export default function TodaysFocusWidget({
+  focus,
+  avoid,
+  variant = 'card',
+}: {
+  focus: string[];
+  avoid: string[];
+  variant?: 'card' | 'plain';
+}) {
   return (
-    <WidgetCard title="Today's focus">
+    <WidgetCard title="Today's focus" variant={variant}>
       {focus.length === 0 && avoid.length === 0 ? (
         <p className="text-sm text-atlas-text-tertiary">
           Nothing stands out yet — run the daily briefing job or open Atlas for a live read.

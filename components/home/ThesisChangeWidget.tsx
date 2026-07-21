@@ -2,9 +2,15 @@ import Link from 'next/link';
 import WidgetCard from './WidgetCard';
 import type { RecentThesisChange } from '@/lib/domain/homeDashboard';
 
-export default function ThesisChangeWidget({ change }: { change: RecentThesisChange | null }) {
+export default function ThesisChangeWidget({
+  change,
+  variant = 'card',
+}: {
+  change: RecentThesisChange | null;
+  variant?: 'card' | 'plain';
+}) {
   return (
-    <WidgetCard title="Recent thesis change">
+    <WidgetCard title="Recent thesis change" variant={variant}>
       {!change ? (
         <p className="text-sm text-atlas-text-tertiary">No thesis changes recorded yet.</p>
       ) : (

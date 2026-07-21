@@ -8,9 +8,15 @@ const DECISION_STYLES: Record<string, string> = {
   DEFERRED: 'text-atlas-text-tertiary',
 };
 
-export default function RecentDecisionsWidget({ decisions }: { decisions: RecentDecision[] }) {
+export default function RecentDecisionsWidget({
+  decisions,
+  variant = 'card',
+}: {
+  decisions: RecentDecision[];
+  variant?: 'card' | 'plain';
+}) {
   return (
-    <WidgetCard title="Recent decisions">
+    <WidgetCard title="Recent decisions" variant={variant}>
       {decisions.length === 0 ? (
         <p className="text-sm text-atlas-text-tertiary">No recommendations decided on yet.</p>
       ) : (

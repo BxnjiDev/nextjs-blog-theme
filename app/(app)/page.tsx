@@ -1,21 +1,35 @@
 import Link from 'next/link';
+import { MessageSquareText, ClipboardCheck, PlusCircle, Newspaper } from 'lucide-react';
 import { getHomeDashboardData } from '@/lib/domain/homeDashboard';
 import { getPerformanceSummary } from '@/lib/domain/performance';
 import { prisma } from '@/lib/prisma';
 import UpcomingEarningsWidget from '@/components/home/UpcomingEarningsWidget';
 import ThesisChangeWidget from '@/components/home/ThesisChangeWidget';
 import TodaysFocusWidget from '@/components/home/TodaysFocusWidget';
-import QuickActionsWidget from '@/components/home/QuickActionsWidget';
 import RecentDecisionsWidget from '@/components/home/RecentDecisionsWidget';
 import PerformanceSnapshotWidget from '@/components/home/PerformanceSnapshotWidget';
 import RecommendationCard from '@/components/RecommendationCard';
 import WidgetCard from '@/components/home/WidgetCard';
+import OpenSection from '@/components/home/OpenSection';
 import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
 import NarrativeSummary from '@/components/home/NarrativeSummary';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import { buildHomeNarrative } from '@/lib/copy/homeNarrative';
 import { formatRelativeTime } from '@/lib/format';
+
+const QUICK_ACTIONS = [
+  { href: '/atlas', label: 'Ask Atlas', icon: MessageSquareText },
+  { href: '/recommendations', label: 'Review recommendations', icon: ClipboardCheck },
+  { href: '/executions', label: 'Record a trade', icon: PlusCircle },
+  { href: '/briefing', label: 'Full daily briefing', icon: Newspaper },
+];
+
+// Grid-column wrapper: top padding + divider except the first item when
+// stacked (mobile), left padding + divider except the first item when
+// side-by-side (desktop) — the spacing OpenSection's own divide-x/divide-y
+// needs from its children.
+const COLUMN_SPACING = 'pt-5 first:pt-0 sm:pt-0 sm:pl-8 sm:first:pl-0';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,41 +133,67 @@ export default async function HomePage() {
         </div>
       </FadeInView>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <WidgetCard title="Highest-conviction recommendation">
-            {highestConvictionThesis ? (
-              <RecommendationCard
-                data={{
-                  id: highestConvictionThesis.id,
-                  symbol: highestConvictionThesis.symbol,
-                  action: highestConvictionThesis.action,
-                  confidenceScore: highestConvictionThesis.confidenceScore,
-                  thesis: highestConvictionThesis.thesis,
-                  proposedDollarAmount: highestConvictionThesis.proposedDollarAmount != null ? Number(highestConvictionThesis.proposedDollarAmount) : null,
-                  percentageOfPortfolio: highestConvictionThesis.percentageOfPortfolio,
-                  dataQualityStatus: highestConvictionThesis.dataQualityStatus,
-                  convictionScore: highestConvictionThesis.holding.thesis?.convictionAssessments[0]?.overallScore ?? null,
-                }}
-              />
-            ) : (
-              <p className="text-sm text-atlas-text-tertiary">No recommendations generated yet — run the recommendation job or ask Atlas.</p>
-            )}
-          </WidgetCard>
+      {/* The single primary focal panel — everything else on Home is
+          secondary to this, per the design brief's "one highest-priority
+          recommendation" guidance. */}
+      <WidgetCard title="Highest-conviction recommendation">
+        {highestConvictionThesis ? (
+          <RecommendationCard
+            data={{
+              id: highestConvictionThesis.id,
+              symbol: highestConvictionThesis.symbol,
+              action: highestConvictionThesis.action,
+              confidenceScore: highestConvictionThesis.confidenceScore,
+              thesis: highestConvictionThesis.thesis,
+              proposedDollarAmount: highestConvictionThesis.proposedDollarAmount != null ? Number(highestConvictionThesis.proposedDollarAmount) : null,
+              percentageOfPortfolio: highestConvictionThesis.percentageOfPortfolio,
+              dataQualityStatus: highestConvictionThesis.dataQualityStatus,
+              convictionScore: highestConvictionThesis.holding.thesis?.convictionAssessments[0]?.overallScore ?? null,
+            }}
+          />
+        ) : (
+          <p className="text-sm text-atlas-text-tertiary">No recommendations generated yet — run the recommendation job or ask Atlas.</p>
+        )}
+      </WidgetCard>
+
+      {/* A lightweight action row, not a boxed "quick actions" card — the
+          links already read as buttons on their own. */}
+      <div className="flex flex-wrap gap-2.5">
+        {QUICK_ACTIONS.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="flex items-center gap-2 rounded-lg border border-atlas-border px-3.5 py-2 text-sm text-atlas-text-secondary transition-colors hover:border-atlas-accent-bright/40 hover:bg-atlas-surface-hover hover:text-atlas-text"
+          >
+            <Icon size={15} strokeWidth={1.75} />
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {/* Everything below is secondary context, grouped into two open
+          sections (hairline dividers, no per-item borders) instead of five
+          more equally-weighted boxes. */}
+      <OpenSection title="Today" columns={2}>
+        <div className={COLUMN_SPACING}>
+          <TodaysFocusWidget focus={data.todaysFocus} avoid={data.todaysAvoid} variant="plain" />
         </div>
-        <ThesisChangeWidget change={data.recentThesisChange} />
-      </div>
+        <div className={COLUMN_SPACING}>
+          <UpcomingEarningsWidget earnings={data.upcomingEarnings} variant="plain" />
+        </div>
+      </OpenSection>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <TodaysFocusWidget focus={data.todaysFocus} avoid={data.todaysAvoid} />
-        <UpcomingEarningsWidget earnings={data.upcomingEarnings} />
-        <QuickActionsWidget />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PerformanceSnapshotWidget performance={performance} />
-        <RecentDecisionsWidget decisions={data.recentDecisions} />
-      </div>
+      <OpenSection title="Recent activity" columns={3}>
+        <div className={COLUMN_SPACING}>
+          <ThesisChangeWidget change={data.recentThesisChange} variant="plain" />
+        </div>
+        <div className={COLUMN_SPACING}>
+          <PerformanceSnapshotWidget performance={performance} variant="plain" />
+        </div>
+        <div className={COLUMN_SPACING}>
+          <RecentDecisionsWidget decisions={data.recentDecisions} variant="plain" />
+        </div>
+      </OpenSection>
     </div>
   );
 }

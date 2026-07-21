@@ -2,9 +2,15 @@ import Link from 'next/link';
 import WidgetCard from './WidgetCard';
 import type { UpcomingEarnings } from '@/lib/domain/homeDashboard';
 
-export default function UpcomingEarningsWidget({ earnings }: { earnings: UpcomingEarnings[] }) {
+export default function UpcomingEarningsWidget({
+  earnings,
+  variant = 'card',
+}: {
+  earnings: UpcomingEarnings[];
+  variant?: 'card' | 'plain';
+}) {
   return (
-    <WidgetCard title="Upcoming earnings">
+    <WidgetCard title="Upcoming earnings" variant={variant}>
       {earnings.length === 0 ? (
         <p className="text-sm text-atlas-text-tertiary">Nothing on the calendar in the near term.</p>
       ) : (

@@ -13,13 +13,19 @@ import type { PerformanceSummary } from '@/lib/domain/performance';
 // it doesn't know").
 const SMALL_BALANCE_THRESHOLD = 25;
 
-export default function PerformanceSnapshotWidget({ performance }: { performance: PerformanceSummary }) {
+export default function PerformanceSnapshotWidget({
+  performance,
+  variant = 'card',
+}: {
+  performance: PerformanceSummary;
+  variant?: 'card' | 'plain';
+}) {
   const metric = performance.weekly.available ? performance.weekly : performance.daily;
   const label = performance.weekly.available ? 'This week vs. SPY' : 'Today vs. SPY';
   const smallBalance = (performance.today?.portfolioValue ?? Infinity) < SMALL_BALANCE_THRESHOLD;
 
   return (
-    <WidgetCard title="Performance snapshot">
+    <WidgetCard title="Performance snapshot" variant={variant}>
       {!metric.available ? (
         <p className="text-sm text-atlas-text-tertiary">{metric.note ?? 'Not enough history yet.'}</p>
       ) : (
