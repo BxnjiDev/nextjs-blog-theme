@@ -11,7 +11,9 @@ import FadeInView from '@/components/motion/FadeInView';
 import { formatPercent } from '@/lib/format';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import InsightStack from '@/components/intelligence/InsightStack';
-import { assessRecommendations } from '@/lib/intelligence/engine';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { decisionToInsight } from '@/lib/decision/engine';
+import type { Insight } from '@/lib/intelligence/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +55,13 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
       : [],
   ]);
 
-  const decisionSummaryInsights = assessRecommendations(pendingRecommendations);
+  // The Decision Engine's read on the single highest-confidence pending
+  // recommendation's symbol — the same lib/domain/decision.ts seam Home,
+  // the Investment Memo, /compare, and Atlas Chat all reference, so this
+  // summary can never state a different verdict than the rest of the app.
+  const topPendingSymbol = pendingRecommendations[0]?.symbol ?? null;
+  const { decision: topDecision } = topPendingSymbol ? await getDecisionForSymbol(topPendingSymbol) : { decision: null };
+  const decisionSummaryInsights: Insight[] = topDecision ? [decisionToInsight(topDecision)] : [];
 
   return (
     <div className="space-y-14">

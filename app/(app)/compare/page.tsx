@@ -1,8 +1,12 @@
 import Link from 'next/link';
 import { compareOpportunities, CASH_BASELINE_SCORE } from '@/lib/domain/compareOpportunities';
 import FadeInView from '@/components/motion/FadeInView';
+import Badge from '@/components/ui/Badge';
 import InsightStack from '@/components/intelligence/InsightStack';
 import { assessComparison } from '@/lib/intelligence/engine';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { quickActionForScore } from '@/lib/decision/engine';
+import { DECISION_ACTION_TONE, DECISION_ACTION_LABEL } from '@/lib/decision/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +25,22 @@ export default async function ComparePage({ searchParams }: { searchParams: { sy
   const includeCash = searchParams.cash !== '0';
 
   const results = symbols.length > 0 ? await compareOpportunities(symbols, includeCash) : [];
+
+  // Held symbols get the full Decision Engine read (they're a small set —
+  // typically 0-2 of the compared symbols — and the richer, portfolio-
+  // aware verdict matters most for a position already in the portfolio).
+  // Not-held/cash entries get a lightweight score-only action instead of
+  // a full per-symbol fetch, since comparison symbols are often arbitrary
+  // tickers with no thesis on record at all.
+  const heldDecisions = new Map<string, Awaited<ReturnType<typeof getDecisionForSymbol>>['decision']>();
+  await Promise.all(
+    results
+      .filter((r) => r.isHeld && !r.isCash)
+      .map(async (r) => {
+        const { decision } = await getDecisionForSymbol(r.symbol);
+        heldDecisions.set(r.symbol, decision);
+      })
+  );
 
   return (
     <div className="space-y-8">
@@ -102,6 +122,14 @@ export default async function ComparePage({ searchParams }: { searchParams: { sy
                   <div className="text-right">
                     <p className="font-mono text-2xl font-semibold text-atlas-text">{r.overallScore}</p>
                     <p className="text-xs text-atlas-text-tertiary">{r.isCash ? '/100 (fixed baseline)' : '/100 conviction'}</p>
+                    {!r.isCash && (
+                      <Badge
+                        tone={DECISION_ACTION_TONE[heldDecisions.get(r.symbol)?.action ?? quickActionForScore(r.overallScore, r.isHeld)]}
+                        className="mt-1.5"
+                      >
+                        {DECISION_ACTION_LABEL[heldDecisions.get(r.symbol)?.action ?? quickActionForScore(r.overallScore, r.isHeld)]}
+                      </Badge>
+                    )}
                   </div>
                 </div>
 

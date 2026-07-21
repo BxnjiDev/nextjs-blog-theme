@@ -8,6 +8,7 @@ import { computeSimulatedMetrics } from '@/lib/domain/simulatorMetrics';
 import { buildMemoryContext } from '@/lib/domain/memory';
 import { normalizeBriefingPortfolioSummary, normalizeBriefingMarketRecap, normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { getTodaysFocus } from '@/lib/intelligence/todaysFocus';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
 import { toJsonSafe } from './serialize';
 
 export interface ToolResult {
@@ -159,6 +160,13 @@ async function recallMemory(input: { symbol: string }) {
   return { symbol, memory: context };
 }
 
+async function getDecision(input: { symbol: string }) {
+  if (!input.symbol) return { error: 'Provide a symbol.' };
+  const { decision, history, relatedPositions } = await getDecisionForSymbol(input.symbol);
+  if (!decision) return { error: `No thesis, recommendation, or holding on record for ${input.symbol.toUpperCase()} — nothing to base a decision on.` };
+  return { decision, history, relatedPositions };
+}
+
 const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   get_portfolio: getPortfolio,
   get_briefing: getBriefing,
@@ -171,6 +179,7 @@ const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   simulate: simulate,
   recall_memory: recallMemory,
   get_todays_focus: todaysFocus,
+  get_decision: getDecision,
 };
 
 /** The one place a tool name (as chosen by Claude) turns into an actual

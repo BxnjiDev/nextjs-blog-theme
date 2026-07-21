@@ -6,9 +6,14 @@ import Meter from '@/components/ui/Meter';
 import Badge from '@/components/ui/Badge';
 import StatStrip, { Stat } from '@/components/ui/Stat';
 import DecisionPanel from '@/components/recommendations/DecisionPanel';
+import InsightCard from '@/components/intelligence/InsightCard';
+import SectionHeading from '@/components/ui/SectionHeading';
+import Panel from '@/components/ui/Panel';
 import FadeInView from '@/components/motion/FadeInView';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 import { normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { decisionToInsight } from '@/lib/decision/engine';
 import { formatPercent } from '@/lib/format';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { ACTION_TONE, ACTION_LABEL, GATE_STATUS_TONE, CHECK_STATUS_TONE, TONE_TEXT } from '@/lib/theme/tone';
@@ -52,9 +57,14 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
   const activeAccountId = await getActiveAccountId();
   if (!recommendation || recommendation.holding.accountId !== activeAccountId) notFound();
 
-  const [latestCalibration, freshness] = await Promise.all([
+  const [latestCalibration, freshness, { decision }] = await Promise.all([
     prisma.confidenceCalibration.findFirst({ orderBy: { generatedAt: 'desc' } }),
     getDataFreshnessSnapshot(),
+    // Same Decision Engine seam every other surface calls (see
+    // lib/domain/decision.ts) — this memo is a point-in-time snapshot from
+    // when it was generated, so this section makes explicit whether
+    // Atlas's live view still agrees with it or has since moved on.
+    getDecisionForSymbol(recommendation.symbol),
   ]);
 
   const explainability = normalizeExplainability(recommendation.explainability);
@@ -91,6 +101,22 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
       </FadeInView>
 
       <FreshnessStrip sources={freshness} />
+
+      {/* This memo is a snapshot from when it was generated — Atlas's live
+          view (lib/domain/decision.ts, re-evaluated against current
+          conviction trend, staleness, and portfolio concentration) may
+          have moved on since. Same Decision/Insight every other surface
+          references, linked through to the full Decision Workspace. */}
+      {decision && (
+        <div>
+          <SectionHeading className="mb-3" action={<Link href={`/intelligence/${recommendation.symbol}`} className="text-atlas-accent-bright underline">Full decision workspace →</Link>}>
+            Atlas&rsquo;s current view
+          </SectionHeading>
+          <Panel variant="flat">
+            <InsightCard insight={decisionToInsight(decision)} />
+          </Panel>
+        </div>
+      )}
 
       {recommendation.dataQualityStatus && (
         <div>

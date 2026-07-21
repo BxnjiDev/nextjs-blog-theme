@@ -17,6 +17,8 @@ import { buildHomeNarrative } from '@/lib/copy/homeNarrative';
 import SectionHeading from '@/components/ui/SectionHeading';
 import InsightStack from '@/components/intelligence/InsightStack';
 import { buildTodaysFocusInsights } from '@/lib/intelligence/engine';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { decisionToInsight } from '@/lib/decision/engine';
 
 const PRIMARY_ACTION = { href: '/atlas', label: 'Ask Atlas', icon: MessageSquareText };
 const SECONDARY_ACTIONS = [
@@ -76,10 +78,19 @@ export default async function HomePage() {
   );
   const usingMockData = !data.status.marketData.configured || !data.status.fundamentals.configured;
 
+  // The Decision Engine's read on the single highest-confidence pending
+  // recommendation's symbol — passing data.portfolio (already fetched
+  // above) so getDecisionForSymbol doesn't issue a second portfolio-wide
+  // fetch just to compute concentration for this one symbol.
+  const topPendingSymbol = pendingRecommendations[0]?.symbol ?? null;
+  const { decision: topDecision } = topPendingSymbol
+    ? await getDecisionForSymbol(topPendingSymbol, { portfolioOverview: data.portfolio })
+    : { decision: null };
+
   const todaysFocusInsights = buildTodaysFocusInsights({
     portfolioHealth: data.portfolioHealth,
     risk,
-    recommendations: pendingRecommendations,
+    decisionInsight: topDecision ? decisionToInsight(topDecision) : null,
     thesisChange: data.recentThesisChange,
     earnings: data.upcomingEarnings,
     earningsWeightBySymbol,

@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { getHomeDashboardData } from '@/lib/domain/homeDashboard';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { decisionToInsight } from '@/lib/decision/engine';
 import { buildTodaysFocusInsights } from './engine';
 import type { Insight } from './types';
 
@@ -36,10 +38,15 @@ export async function getTodaysFocus(): Promise<Insight[]> {
   );
   const usingMockData = !data.status.marketData.configured || !data.status.fundamentals.configured;
 
+  const topPendingSymbol = pendingRecommendations[0]?.symbol ?? null;
+  const { decision: topDecision } = topPendingSymbol
+    ? await getDecisionForSymbol(topPendingSymbol, { portfolioOverview: data.portfolio })
+    : { decision: null };
+
   return buildTodaysFocusInsights({
     portfolioHealth: data.portfolioHealth,
     risk,
-    recommendations: pendingRecommendations,
+    decisionInsight: topDecision ? decisionToInsight(topDecision) : null,
     thesisChange: data.recentThesisChange,
     earnings: data.upcomingEarnings,
     earningsWeightBySymbol,

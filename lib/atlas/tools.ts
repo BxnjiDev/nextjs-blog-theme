@@ -110,4 +110,14 @@ export const ATLAS_TOOLS: Anthropic.Tool[] = [
       "Atlas's own prioritized read on what currently matters most: portfolio health, risk, the single highest-confidence pending recommendation, a recent thesis change, near-term earnings, and data-quality context, each scored (importance/confidence/urgency/impact) and ranked. This is the exact same ranking the Home dashboard's \"Today's focus\" shows — use it when asked something like \"what should I pay attention to today\" or \"what's my highest priority\" so the answer matches what the dashboard already says, rather than re-deriving a separate opinion from get_risk/get_recommendations/get_briefing individually.",
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_decision',
+    description:
+      "The Decision Engine's structured verdict for one symbol: a recommended action (increase/begin/continue holding/reduce/exit/wait/gather more information/no action), the reasoning behind it across eleven factors (thesis strength, conviction, risk, valuation, concentration, sector exposure, technical context, catalysts, news impact, earnings timing, portfolio objectives), supporting evidence, primary risks, invalidation conditions, and a confidence score that's discounted for stale data, conflicting signals, or missing information — never presented as more certain than the evidence supports. Also returns the full decision history for that symbol (every past recommendation, when its stated action changed and why) and related same-sector portfolio positions. This is the exact same verdict the Investment Memo, Home, and /compare show for this symbol — use this instead of just reading get_recommendations or get_thesis in isolation when asked what Atlas thinks should be done about a specific holding.",
+    input_schema: {
+      type: 'object',
+      properties: { symbol: { type: 'string', description: 'Ticker symbol.' } },
+      required: ['symbol'],
+    },
+  },
 ];

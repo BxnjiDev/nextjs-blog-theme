@@ -3,7 +3,7 @@ import { RISK_COMPONENT_LABELS } from '@/lib/domain/risk';
 import type { PortfolioHealthResult } from '@/lib/domain/portfolioHealth';
 import type { RankedComparisonEntry } from '@/lib/domain/compareOpportunities';
 import type { TimelineEntry } from '@/lib/domain/timeline';
-import { ACTION_TONE, ACTION_LABEL, TIMELINE_TYPE_TONE, type Tone } from '@/lib/theme/tone';
+import { TIMELINE_TYPE_TONE, type Tone } from '@/lib/theme/tone';
 import { finalizeInsight, sortByPriority } from './scoring';
 import type { Insight, InsightScores } from './types';
 
@@ -25,7 +25,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * still true but no longer new from crowding out what actually just
  * changed, without making old-but-still-relevant context disappear
  * entirely (floors at 5, never 0). */
-function freshnessFromAge(ageMs: number, halfLifeDays: number): number {
+export function freshnessFromAge(ageMs: number, halfLifeDays: number): number {
   const days = Math.max(0, ageMs / DAY_MS);
   const score = 100 * Math.pow(0.5, days / halfLifeDays);
   return Math.max(5, Math.min(100, Math.round(score)));
@@ -168,66 +168,6 @@ export function assessRisk(risk: RiskAssessmentLike | null): Insight[] {
         confidenceReasoning: 'Twelve deterministic factors (lib/domain/risk.ts), not an AI-generated number.',
       },
       href: '/risk',
-    }),
-  ];
-}
-
-// ---------------------------------------------------------------------------
-// Recommendations
-// ---------------------------------------------------------------------------
-
-export interface RecommendationLike {
-  id: string;
-  symbol: string;
-  action: string;
-  confidenceScore: number;
-  dataQualityStatus?: string | null;
-  userDecision: string;
-  generatedAt: Date;
-}
-
-/** Only the single highest-confidence PENDING recommendation surfaces —
- * "highest priority decision" from the brief means one thing to look at,
- * not a re-listing of the whole queue (that's what /recommendations is
- * for). */
-export function assessRecommendations(recommendations: RecommendationLike[]): Insight[] {
-  const pending = recommendations.filter((r) => r.userDecision === 'PENDING');
-  if (pending.length === 0) return [];
-  const top = [...pending].sort((a, b) => b.confidenceScore - a.confidenceScore)[0];
-  const ageMs = Date.now() - top.generatedAt.getTime();
-  const highConviction = top.confidenceScore >= 8;
-
-  const tone: Tone = ACTION_TONE[top.action] ?? 'info';
-  const actionLabel = (ACTION_LABEL[top.action] ?? top.action).toLowerCase();
-  const headline = `${top.symbol}: ${actionLabel} recommendation awaiting your decision.`;
-  const otherCount = pending.length - 1;
-  const interpretation = `Confidence ${top.confidenceScore}/10${highConviction ? ' — one of Atlas’s higher-conviction calls' : ''}. ${
-    otherCount > 0 ? `${otherCount} other recommendation${otherCount === 1 ? '' : 's'} also pending.` : 'No other recommendations are pending.'
-  }`;
-
-  const scores: InsightScores = {
-    importance: highConviction ? 75 : 45,
-    confidence: Math.round(top.confidenceScore * 10),
-    urgency: highConviction ? 60 : 35,
-    impact: highConviction ? 65 : 35,
-    freshness: freshnessFromAge(ageMs, 5),
-  };
-
-  return [
-    finalizeInsight({
-      id: `recommendation-${top.id}`,
-      category: 'recommendation',
-      tone,
-      headline,
-      interpretation,
-      recommendation: 'Review the Investment Memo and record a decision (reject or defer) when ready.',
-      scores,
-      reasoning: {
-        evidence: top.dataQualityStatus ? [`Data quality gate: ${top.dataQualityStatus.replace(/_/g, ' ').toLowerCase()}`] : [],
-        confidenceReasoning: `Atlas scored this ${top.confidenceScore}/10 through its recommendation-generation pipeline, gated by a data-quality check before publishing.`,
-      },
-      href: `/recommendations/${top.id}`,
-      symbol: top.symbol,
     }),
   ];
 }
@@ -503,7 +443,12 @@ export function assessTimelineNotable(entries: TimelineEntry[], limit = 3): Insi
 export interface TodaysFocusInput {
   portfolioHealth: HealthAssessmentLike | null;
   risk: RiskAssessmentLike | null;
-  recommendations: RecommendationLike[];
+  /** The Decision Engine's read (lib/decision/engine.ts's decisionToInsight)
+   * on the single highest-priority pending recommendation's symbol —
+   * replaces what used to be a shallow, Decision-Engine-unaware
+   * "recommendation pending" insight generated here directly, so Home's
+   * Today's Focus and the full Decision Workspace can never disagree. */
+  decisionInsight?: Insight | null;
   thesisChange: ThesisChangeLike | null;
   earnings: UpcomingEarningsLike[];
   earningsWeightBySymbol?: Record<string, number>;
@@ -518,7 +463,7 @@ export function buildTodaysFocusInsights(input: TodaysFocusInput): Insight[] {
   const insights: Insight[] = [
     ...assessPortfolioHealth(input.portfolioHealth),
     ...assessRisk(input.risk),
-    ...assessRecommendations(input.recommendations),
+    ...(input.decisionInsight ? [input.decisionInsight] : []),
     ...assessThesisChange(input.thesisChange),
     ...assessEarnings(input.earnings, input.earningsWeightBySymbol),
     ...assessMarketContext({ usingMockData: input.usingMockData }),

@@ -1,11 +1,19 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Badge from '@/components/ui/Badge';
+import Panel from '@/components/ui/Panel';
+import SectionHeading from '@/components/ui/SectionHeading';
 import { ACTION_TONE, ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
 import ConvictionScrubber from '@/components/intelligence/ConvictionScrubber';
+import InsightCard from '@/components/intelligence/InsightCard';
+import DecisionFactorGrid from '@/components/decision/DecisionFactorGrid';
+import RelatedPositionsList from '@/components/decision/RelatedPositionsList';
 import EmptyState from '@/components/ui/EmptyState';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
+import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { decisionToInsight } from '@/lib/decision/engine';
 import FadeInView from '@/components/motion/FadeInView';
 
 interface ExplainabilityShape {
@@ -74,11 +82,18 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
   const latestRecommendation = recommendations[0] ?? null;
   const explainability = (latestRecommendation?.explainability ?? null) as ExplainabilityShape | null;
 
-  const recentFundamentals = await prisma.fundamentalSnapshot.findMany({
-    where: { symbol: holding.symbol, periodType: 'QUARTERLY' },
-    orderBy: { reportDate: 'desc' },
-    take: 4,
-  });
+  // getDecisionForSymbol is the Decision Engine's one shared seam (see
+  // lib/domain/decision.ts) — the same function Home, /recommendations,
+  // /compare, and the Atlas Chat tool layer call, so this page's verdict
+  // can never conflict with what any other surface says about this symbol.
+  const [recentFundamentals, { decision, history, relatedPositions }] = await Promise.all([
+    prisma.fundamentalSnapshot.findMany({
+      where: { symbol: holding.symbol, periodType: 'QUARTERLY' },
+      orderBy: { reportDate: 'desc' },
+      take: 4,
+    }),
+    getDecisionForSymbol(symbol),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -90,6 +105,42 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           {holding.symbol} <span className="font-normal text-atlas-text-tertiary">— {holding.name}</span>
         </h1>
       </FadeInView>
+
+      {/* The Decision Workspace's verdict — what Atlas believes should
+          happen next, synthesized by lib/decision/engine.ts from the
+          latest recommendation re-evaluated against current conviction
+          trend, staleness, data quality, and portfolio concentration. The
+          exact same Decision (and the same InsightCard/"Show why" every
+          other Insight in the app uses) that Home, /recommendations,
+          /compare, and Atlas Chat all reference — never a second opinion. */}
+      {decision && (
+        <FadeInView delay={0.02}>
+          <SectionHeading className="mb-3">Atlas&rsquo;s decision</SectionHeading>
+          <Panel variant="flat">
+            <InsightCard insight={decisionToInsight(decision)} />
+          </Panel>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_260px]">
+            <DecisionFactorGrid factors={decision.reasoning} />
+            <div className="rounded-lg border border-atlas-border-subtle bg-atlas-surface-raised p-3">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-atlas-text-tertiary">Related portfolio positions</p>
+              <RelatedPositionsList positions={relatedPositions} />
+            </div>
+          </div>
+          {decision.invalidationConditions.length > 0 && (
+            <div className="mt-4 rounded-lg border border-atlas-warning/20 bg-atlas-warning/5 p-3">
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-atlas-warning">What would change this</p>
+              <ul className="space-y-1 text-sm text-atlas-text-secondary">
+                {decision.invalidationConditions.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {decision.expectedReviewDate && (
+            <p className="mt-3 text-xs text-atlas-text-tertiary">Atlas expects to revisit this by {decision.expectedReviewDate.toLocaleDateString()}.</p>
+          )}
+        </FadeInView>
+      )}
 
       {!thesis ? (
         <EmptyState>No thesis established yet — pending the next thesis-review job run.</EmptyState>
@@ -287,7 +338,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
 
           <div className="atlas-glass rounded-xl p-4">
             <h2 className="mb-3 font-medium">Recommendation history &amp; performance attribution</h2>
-            {recommendations.length === 0 ? (
+            {history.length === 0 ? (
               <EmptyState compact>No recommendations generated yet.</EmptyState>
             ) : (
               <div className="overflow-x-auto">
@@ -304,20 +355,29 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
                     </tr>
                   </thead>
                   <tbody>
-                    {recommendations.map((r) => (
-                      <tr key={r.id} className="border-t border-atlas-border-subtle">
-                        <td className="py-2 pr-4">{r.generatedAt.toLocaleDateString()}</td>
-                        <td className="py-2 pr-4">
-                          <Badge tone={ACTION_TONE[r.action] ?? 'neutral'}>{ACTION_LABEL[r.action] ?? r.action}</Badge>
-                        </td>
-                        <td className="py-2 pr-4">{r.confidenceScore}/10</td>
-                        <td className="py-2 pr-4">{r.outcome?.return30d !== null && r.outcome?.return30d !== undefined ? `${r.outcome.return30d.toFixed(1)}%` : 'Pending'}</td>
-                        <td className="py-2 pr-4">{r.outcome?.return90d !== null && r.outcome?.return90d !== undefined ? `${r.outcome.return90d.toFixed(1)}%` : 'Pending'}</td>
-                        <td className="py-2 pr-4">{r.outcome?.alpha90d !== null && r.outcome?.alpha90d !== undefined ? `${r.outcome.alpha90d.toFixed(1)}pp` : 'Pending'}</td>
-                        <td className="py-2">
-                          {r.outcome?.wasCorrect === true ? 'Correct' : r.outcome?.wasCorrect === false ? 'Incorrect' : 'Not yet graded'}
-                        </td>
-                      </tr>
+                    {history.map((h) => (
+                      <Fragment key={h.recommendationId}>
+                        {h.changedFromPrevious && (
+                          <tr>
+                            <td colSpan={7} className="pt-3 pb-1 text-xs text-atlas-accent-bright">
+                              ↳ Action changed to {h.actionLabel.toLowerCase()}{h.changeReason ? ` — ${h.changeReason}` : ''}
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="border-t border-atlas-border-subtle">
+                          <td className="py-2 pr-4">{h.date.toLocaleDateString()}</td>
+                          <td className="py-2 pr-4">
+                            <Badge tone={ACTION_TONE[h.action] ?? 'neutral'}>{ACTION_LABEL[h.action] ?? h.action}</Badge>
+                          </td>
+                          <td className="py-2 pr-4">{h.confidenceScore}/10</td>
+                          <td className="py-2 pr-4">{h.outcome?.return30d !== null && h.outcome?.return30d !== undefined ? `${h.outcome.return30d.toFixed(1)}%` : 'Pending'}</td>
+                          <td className="py-2 pr-4">{h.outcome?.return90d !== null && h.outcome?.return90d !== undefined ? `${h.outcome.return90d.toFixed(1)}%` : 'Pending'}</td>
+                          <td className="py-2 pr-4">{h.outcome?.alpha90d !== null && h.outcome?.alpha90d !== undefined ? `${h.outcome.alpha90d.toFixed(1)}pp` : 'Pending'}</td>
+                          <td className="py-2">
+                            {h.outcome?.wasCorrect === true ? 'Correct' : h.outcome?.wasCorrect === false ? 'Incorrect' : 'Not yet graded'}
+                          </td>
+                        </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
