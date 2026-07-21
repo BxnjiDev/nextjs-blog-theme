@@ -15,6 +15,7 @@ import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
 import NarrativeSummary from '@/components/home/NarrativeSummary';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
+import HeroMetric from '@/components/shared/HeroMetric';
 import { buildHomeNarrative } from '@/lib/copy/homeNarrative';
 import { formatRelativeTime } from '@/lib/format';
 
@@ -32,10 +33,6 @@ const QUICK_ACTIONS = [
 const COLUMN_SPACING = 'pt-5 first:pt-0 sm:pt-0 sm:pl-8 sm:first:pl-0';
 
 export const dynamic = 'force-dynamic';
-
-function formatCurrency(n: number): string {
-  return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-}
 
 export default async function HomePage() {
   const [data, performance] = await Promise.all([getHomeDashboardData(), getPerformanceSummary()]);
@@ -60,17 +57,32 @@ export default async function HomePage() {
   return (
     <div className="space-y-8">
       <AutoRefresh />
+
+      {/* Hero — shared composition with Portfolio, so the two pages read as
+          one product. The greeting + narrative frame the number instead of
+          competing with it for top billing. */}
       <FadeInView>
-        <h1 className="text-3xl font-semibold tracking-tight text-atlas-text">{data.greeting}</h1>
-        <div className="mt-3">
+        <p className="text-sm text-atlas-text-secondary">{data.greeting}</p>
+        {data.portfolio ? (
+          <div className="mt-2">
+            <HeroMetric
+              eyebrow="Total portfolio value"
+              value={data.portfolio.totalValue}
+              changeValue={data.portfolio.dayChangeValue}
+              changePercent={data.portfolio.dayChangePercent}
+              changeLabel="today"
+            />
+          </div>
+        ) : (
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-atlas-text">No portfolio connected yet</h1>
+        )}
+        <div className="mt-4">
           <NarrativeSummary sentences={buildHomeNarrative(data)} />
         </div>
       </FadeInView>
 
-      {/* Thin hairline strip, not four equal boxes — the same composition
-          used on Portfolio/Risk/Health, so the four numbers that matter
-          most read as one instrument panel instead of a fourth of a
-          generic admin-dashboard grid. */}
+      {/* Thin hairline strip, not four equal boxes — supporting facts
+          beneath the hero number rather than competing with it. */}
       <FadeInView delay={0.05}>
         <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
           <div>
@@ -93,10 +105,7 @@ export default async function HomePage() {
           <div>
             <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Cash available</p>
             {data.portfolio ? (
-              <>
-                <AnimatedNumber value={data.portfolio.cashBalance} format="currency0" className="mt-1 font-mono text-lg text-atlas-text" />
-                <p className="mt-0.5 text-xs text-atlas-text-tertiary">of {formatCurrency(data.portfolio.totalValue)} total</p>
-              </>
+              <AnimatedNumber value={data.portfolio.cashBalance} format="currency0" className="mt-1 font-mono text-lg text-atlas-text" />
             ) : (
               <p className="mt-1 font-mono text-lg text-atlas-text-tertiary">No data</p>
             )}
@@ -171,9 +180,10 @@ export default async function HomePage() {
         ))}
       </div>
 
-      {/* Everything below is secondary context, grouped into two open
-          sections (hairline dividers, no per-item borders) instead of five
-          more equally-weighted boxes. */}
+      {/* Everything below is secondary context, grouped into two
+          collapsible open sections (hairline dividers, no per-item
+          borders) instead of five more equally-weighted boxes —
+          expandable in place rather than always occupying scroll space. */}
       <OpenSection title="Today" columns={2}>
         <div className={COLUMN_SPACING}>
           <TodaysFocusWidget focus={data.todaysFocus} avoid={data.todaysAvoid} variant="plain" />

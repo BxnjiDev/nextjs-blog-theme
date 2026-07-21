@@ -21,8 +21,15 @@ const TOTAL_DURATION_MS = 2600;
 export default function BootSequence({ onComplete }: { onComplete: () => void }) {
   const reduceMotion = useReducedMotion();
   const [skipVisible, setSkipVisible] = useState(false);
+  // Server-rendered markup can't know the browser's prefers-reduced-motion
+  // setting, so the very first client render must match the server's
+  // (full-animation) output; only after that render commits — once
+  // `mounted` flips in an effect — is it safe to swap to `null` for
+  // reduced-motion users without a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     if (reduceMotion) {
       const t = setTimeout(onComplete, 150);
       return () => clearTimeout(t);
@@ -35,7 +42,7 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
     };
   }, [onComplete, reduceMotion]);
 
-  if (reduceMotion) return null;
+  if (mounted && reduceMotion) return null;
 
   return (
     <motion.div

@@ -65,6 +65,15 @@ export default function AtlasInitialization({
   const reduceMotion = useReducedMotion();
   const [stage, setStage] = useState<Stage>('authorization');
   const featured = summary.lines.filter((l) => FEATURED_LABELS.includes(l.label));
+  // See BootSequence.tsx's identical comment: the server can't know the
+  // browser's prefers-reduced-motion setting, so the first client render
+  // must match the server's (full-sequence) markup — only after that
+  // commits is it safe to switch to the reduced static screen.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (reduceMotion) return; // reduced-motion renders one static screen and auto-advances instead
@@ -98,7 +107,7 @@ export default function AtlasInitialization({
     return () => window.removeEventListener('keydown', onKey);
   }, [onComplete]);
 
-  if (reduceMotion) {
+  if (mounted && reduceMotion) {
     return (
       <div
         className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-atlas-canvas px-6 py-12"
