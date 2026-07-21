@@ -46,12 +46,15 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+    <div className="space-y-8">
+      <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-medium">Hypothetical allocation</h2>
+          <h2 className="text-sm font-medium text-atlas-text">Hypothetical allocation</h2>
           {isDirty && (
-            <button onClick={reset} className="rounded border border-gray-300 px-3 py-1 text-xs dark:border-gray-700">
+            <button
+              onClick={reset}
+              className="rounded-lg border border-atlas-border px-3 py-1 text-xs text-atlas-text-secondary transition-colors hover:border-atlas-accent/40 hover:text-atlas-text active:scale-[0.97]"
+            >
               Reset to current
             </button>
           )}
@@ -59,12 +62,12 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-left text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                <th className="py-1 pr-2">Symbol</th>
-                <th className="py-1 pr-2">Current shares</th>
-                <th className="py-1 pr-2">Hypothetical shares</th>
-                <th className="py-1 pr-2">Market value</th>
-                <th className="py-1 pr-2">Weight</th>
+              <tr className="border-b border-atlas-border-subtle text-left text-[11px] uppercase tracking-wide text-atlas-text-tertiary">
+                <th className="py-2 pr-4 font-medium">Symbol</th>
+                <th className="py-2 pr-4 font-medium">Current shares</th>
+                <th className="py-2 pr-4 font-medium">Hypothetical shares</th>
+                <th className="py-2 pr-4 font-medium">Market value</th>
+                <th className="py-2 pr-4 font-medium">Weight</th>
               </tr>
             </thead>
             <tbody>
@@ -74,107 +77,114 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
                 const weight = baseline.totalValue > 0 ? (marketValue / baseline.totalValue) * 100 : 0;
                 const changed = qty !== h.quantity;
                 return (
-                  <tr key={h.symbol} className="border-b border-gray-50 dark:border-gray-900">
-                    <td className="py-1.5 pr-2 font-medium">{h.symbol}</td>
-                    <td className="py-1.5 pr-2 text-gray-500 dark:text-gray-400">{h.quantity}</td>
-                    <td className="py-1.5 pr-2">
+                  <tr key={h.symbol} className="border-b border-atlas-border-subtle/60">
+                    <td className="py-2 pr-4 font-medium text-atlas-text">{h.symbol}</td>
+                    <td className="py-2 pr-4 font-mono text-atlas-text-tertiary">{h.quantity}</td>
+                    <td className="py-2 pr-4">
                       <input
                         type="number"
                         min={0}
                         step="any"
                         value={qty}
                         onChange={(e) => updateShares(h.symbol, Number(e.target.value))}
-                        className={`w-24 rounded border px-2 py-1 text-sm dark:bg-transparent ${changed ? 'border-blue-400' : 'border-gray-300 dark:border-gray-700'}`}
+                        className={`w-24 rounded-lg border bg-atlas-surface-raised px-2 py-1 text-sm text-atlas-text focus:outline-none focus:ring-1 focus:ring-atlas-accent/40 ${
+                          changed ? 'border-atlas-accent/50' : 'border-atlas-border'
+                        }`}
                       />
                     </td>
-                    <td className="py-1.5 pr-2">${marketValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                    <td className="py-1.5 pr-2">{weight.toFixed(1)}%</td>
+                    <td className="py-2 pr-4 font-mono text-atlas-text-secondary">
+                      ${marketValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </td>
+                    <td className="py-2 pr-4 font-mono text-atlas-text-secondary">{weight.toFixed(1)}%</td>
                   </tr>
                 );
               })}
               <tr>
-                <td className="py-1.5 pr-2 font-medium">Cash</td>
-                <td className="py-1.5 pr-2 text-gray-500 dark:text-gray-400">
+                <td className="py-2 pr-4 font-medium text-atlas-text">Cash</td>
+                <td className="py-2 pr-4 font-mono text-atlas-text-tertiary">
                   ${baseline.cashBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </td>
-                <td colSpan={1} />
-                <td className={`py-1.5 pr-2 font-medium ${overAllocated ? 'text-risk-high' : ''}`}>
+                <td />
+                <td className={`py-2 pr-4 font-mono font-medium ${overAllocated ? 'text-risk-high' : 'text-atlas-text'}`}>
                   ${hypotheticalCash.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </td>
-                <td className="py-1.5 pr-2">{baseline.totalValue > 0 ? ((hypotheticalCash / baseline.totalValue) * 100).toFixed(1) : '0.0'}%</td>
+                <td className="py-2 pr-4 font-mono text-atlas-text-secondary">
+                  {baseline.totalValue > 0 ? ((hypotheticalCash / baseline.totalValue) * 100).toFixed(1) : '0.0'}%
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
         {overAllocated && (
-          <p className="mt-2 text-xs text-risk-high">
+          <p className="mt-3 text-xs text-risk-high">
             This allocation spends ${Math.abs(hypotheticalCash).toLocaleString(undefined, { maximumFractionDigits: 0 })} more
             than the portfolio&rsquo;s total value (${baseline.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}) —
             not achievable without margin.
           </p>
         )}
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        <p className="mt-3 text-xs text-atlas-text-tertiary">
           Total portfolio value stays fixed at ${baseline.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })} —
           this simulates reallocating existing capital, not adding new money. Nothing here is saved or sent anywhere;
           it recomputes live in your browser from{' '}
-          <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/risk.ts</code> and{' '}
-          <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/portfolioHealth.ts</code>, the same
+          <code className="rounded bg-atlas-surface-raised px-1">lib/domain/risk.ts</code> and{' '}
+          <code className="rounded bg-atlas-surface-raised px-1">lib/domain/portfolioHealth.ts</code>, the same
           engines behind /risk and /health.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Portfolio risk score</p>
-          <p className="text-2xl font-semibold">{risk.overallScore}/100</p>
+      <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Portfolio risk score</p>
+          <p className="mt-1 font-mono text-lg text-atlas-text">{risk.overallScore}/100</p>
         </div>
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Portfolio health score</p>
-          <p className="text-2xl font-semibold">{health.overallScore}/100</p>
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Portfolio health score</p>
+          <p className="mt-1 font-mono text-lg text-atlas-text">{health.overallScore}/100</p>
         </div>
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Largest position</p>
-          <p className="text-2xl font-semibold">{largestPosition?.symbol ?? 'n/a'}</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Largest position</p>
+          <p className="mt-1 font-mono text-lg text-atlas-text">{largestPosition?.symbol ?? 'n/a'}</p>
+          <p className="mt-0.5 text-xs text-atlas-text-tertiary">
             {largestPosition && baseline.totalValue > 0 ? `${((largestPosition.marketValue / baseline.totalValue) * 100).toFixed(1)}% of portfolio` : ''}
           </p>
         </div>
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Largest risk factor</p>
-          <p className="text-2xl font-semibold">{largestRiskEntry?.score ?? 'n/a'}/100</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{largestRiskEntry?.label ?? ''}</p>
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Largest risk factor</p>
+          <p className="mt-1 font-mono text-lg text-atlas-text">{largestRiskEntry?.score ?? 'n/a'}/100</p>
+          <p className="mt-0.5 text-xs text-atlas-text-tertiary">{largestRiskEntry?.label ?? ''}</p>
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-3 font-medium">Sector exposure</h2>
-        <div className="space-y-2">
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-atlas-text">Sector exposure</h2>
+        <div className="space-y-2.5">
           {Object.entries(sectorWeights)
             .sort((a, b) => b[1] - a[1])
             .map(([sector, pct]) => (
               <div key={sector} className="flex items-center gap-2 text-sm">
-                <span className="w-40 shrink-0 truncate text-gray-600 dark:text-gray-400">{sector}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-                  <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, pct)}%` }} />
+                <span className="w-40 shrink-0 truncate text-atlas-text-secondary">{sector}</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-atlas-border">
+                  <div
+                    className="h-full rounded-full bg-atlas-accent-bright transition-[width] duration-500 ease-out"
+                    style={{ width: `${Math.min(100, pct)}%` }}
+                  />
                 </div>
-                <span className="w-14 shrink-0 text-right text-gray-500 dark:text-gray-400">{pct.toFixed(1)}%</span>
+                <span className="w-14 shrink-0 text-right font-mono text-atlas-text-tertiary">{pct.toFixed(1)}%</span>
               </div>
             ))}
-          {Object.keys(sectorWeights).length === 0 && <p className="text-sm text-gray-500">No sector data available.</p>}
+          {Object.keys(sectorWeights).length === 0 && <p className="text-sm text-atlas-text-tertiary">No sector data available.</p>}
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-3 font-medium">Risk breakdown</h2>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-atlas-text">Risk breakdown</h2>
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(RISK_LABELS).map(([key, label]) => {
             const component = (risk as unknown as Record<string, { score: number; explanation: string }>)[key];
             return (
-              <div key={key} className="rounded border border-gray-100 px-3 py-2 text-xs dark:border-gray-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">{label}</span>
-                  <span className="font-medium">{component.score}</span>
-                </div>
+              <div key={key} className="flex items-center justify-between border-b border-atlas-border-subtle/60 pb-2 text-xs">
+                <span className="text-atlas-text-tertiary">{label}</span>
+                <span className="font-mono font-medium text-atlas-text-secondary">{component.score}</span>
               </div>
             );
           })}
@@ -182,9 +192,9 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
       </div>
 
       {isDirty && (
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <h2 className="mb-3 font-medium">Allocation changes vs. current portfolio</h2>
-          <ul className="space-y-1 text-sm">
+        <div className="border-t border-atlas-border-subtle pt-6">
+          <h2 className="mb-3 text-sm font-medium text-atlas-text">Allocation changes vs. current portfolio</h2>
+          <ul className="space-y-1.5 text-sm">
             {baseline.holdings
               .filter((h) => (shares[h.symbol] ?? h.quantity) !== h.quantity)
               .map((h) => {
@@ -193,10 +203,10 @@ export default function SimulatorClient({ baseline }: { baseline: SimulatorBasel
                 const deltaValue = deltaQty * h.currentPrice;
                 return (
                   <li key={h.symbol} className="flex items-center justify-between">
-                    <span>
+                    <span className="text-atlas-text-secondary">
                       {h.symbol}: {h.quantity} → {newQty} shares
                     </span>
-                    <span className={deltaValue >= 0 ? 'text-risk-high' : 'text-risk-low'}>
+                    <span className={`font-mono ${deltaValue >= 0 ? 'text-risk-high' : 'text-risk-low'}`}>
                       {deltaValue >= 0 ? '+' : '-'}${Math.abs(deltaValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </span>
                   </li>
