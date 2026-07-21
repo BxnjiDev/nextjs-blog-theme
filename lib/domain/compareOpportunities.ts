@@ -74,7 +74,7 @@ function displayScore(conviction: ConvictionResult, key: CategoryKey): number | 
   return INVERTED.has(key) ? 100 - score : score;
 }
 
-async function analyzeSymbol(symbol: string, heldSymbols: Set<string>): Promise<ComparisonEntry> {
+async function analyzeSymbol(symbol: string, heldSymbols: Set<string>, accountId: string | null): Promise<ComparisonEntry> {
   try {
     const [quote, fundamentals, history, sp500History, fundamentalHistory, nextEarnings, latestRec] = await Promise.all([
       marketDataProvider.getQuote(symbol),
@@ -83,7 +83,9 @@ async function analyzeSymbol(symbol: string, heldSymbols: Set<string>): Promise<
       marketDataProvider.getSp500History(60),
       getFundamentalHistory(symbol),
       prisma.earningsEvent.findFirst({ where: { symbol, isEstimate: true }, orderBy: { reportDate: 'asc' } }),
-      prisma.recommendation.findFirst({ where: { symbol }, orderBy: { generatedAt: 'desc' } }),
+      accountId
+        ? prisma.recommendation.findFirst({ where: { symbol, holding: { accountId } }, orderBy: { generatedAt: 'desc' } })
+        : Promise.resolve(null),
     ]);
     const daysToNextEarnings = nextEarnings
       ? Math.round((nextEarnings.reportDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -218,7 +220,7 @@ export async function compareOpportunities(symbols: string[], includeCash = true
     : [];
   const heldSymbols = new Set(holdings.map((h) => h.symbol));
 
-  const entries: ComparisonEntry[] = await Promise.all(uniqueSymbols.map((s) => analyzeSymbol(s, heldSymbols)));
+  const entries: ComparisonEntry[] = await Promise.all(uniqueSymbols.map((s) => analyzeSymbol(s, heldSymbols, accountId)));
 
   if (includeCash) {
     entries.push({

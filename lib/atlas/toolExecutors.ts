@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getPortfolioOverview } from '@/lib/domain/portfolio';
+import { getPortfolioOverview, getActiveAccountId } from '@/lib/domain/portfolio';
 import { getPortfolioTimeline } from '@/lib/domain/timeline';
 import { getPerformanceSummary } from '@/lib/domain/performance';
 import { compareOpportunities } from '@/lib/domain/compareOpportunities';
@@ -32,12 +32,18 @@ async function getBriefing() {
 }
 
 async function getRecommendations(input: { id?: string; symbol?: string; limit?: number }) {
+  // Every lookup here is scoped to the active account — Atlas Chat must
+  // never describe another account's recommendation as if it were the
+  // user's own (same trust boundary as /recommendations/[id] and
+  // /recommendations; see lib/domain/portfolio.ts).
+  const accountId = await getActiveAccountId();
+
   if (input.id) {
     const r = await prisma.recommendation.findUnique({
       where: { id: input.id },
       include: { outcome: true, holding: { include: { thesis: { include: { convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 1 } } } } } },
     });
-    if (!r) return { error: `No recommendation found with id ${input.id}.` };
+    if (!r || r.holding.accountId !== accountId) return { error: `No recommendation found with id ${input.id}.` };
     return {
       ...r,
       explainability: normalizeExplainability(r.explainability),
@@ -46,8 +52,13 @@ async function getRecommendations(input: { id?: string; symbol?: string; limit?:
     };
   }
 
+  if (!accountId) return { recommendations: [] };
+
   const recommendations = await prisma.recommendation.findMany({
-    where: input.symbol ? { symbol: input.symbol.toUpperCase() } : undefined,
+    where: {
+      holding: { accountId },
+      ...(input.symbol ? { symbol: input.symbol.toUpperCase() } : {}),
+    },
     distinct: ['holdingId'],
     orderBy: [{ holdingId: 'asc' }, { generatedAt: 'desc' }],
     take: Math.min(input.limit ?? 10, 25),
@@ -80,17 +91,20 @@ async function getRisk() {
 
 async function getThesis(input: { symbol: string }) {
   const symbol = input.symbol.toUpperCase();
-  const holding = await prisma.holding.findFirst({
-    where: { symbol },
-    include: {
-      thesis: {
+  const accountId = await getActiveAccountId();
+  const holding = accountId
+    ? await prisma.holding.findFirst({
+        where: { symbol, accountId },
         include: {
-          convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 1 },
-          changeEvents: { orderBy: { createdAt: 'desc' }, take: 10 },
+          thesis: {
+            include: {
+              convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 1 },
+              changeEvents: { orderBy: { createdAt: 'desc' }, take: 10 },
+            },
+          },
         },
-      },
-    },
-  });
+      })
+    : null;
   if (!holding?.thesis) return { error: `No thesis on record for ${symbol}.` };
   return {
     symbol,
@@ -131,7 +145,8 @@ async function simulate(input: { changes: { symbol: string; quantity: number }[]
 
 async function recallMemory(input: { symbol: string }) {
   const symbol = input.symbol.toUpperCase();
-  const holding = await prisma.holding.findFirst({ where: { symbol } });
+  const accountId = await getActiveAccountId();
+  const holding = accountId ? await prisma.holding.findFirst({ where: { symbol, accountId } }) : null;
   if (!holding) return { error: `No holding on record for ${symbol}.` };
   const context = await buildMemoryContext(holding.id, symbol);
   return { symbol, memory: context };

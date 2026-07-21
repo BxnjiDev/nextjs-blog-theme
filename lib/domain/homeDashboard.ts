@@ -75,22 +75,30 @@ export async function getHomeDashboardData(): Promise<HomeDashboardData> {
       orderBy: [{ holdingId: 'asc' }, { generatedAt: 'desc' }],
       select: { id: true, symbol: true, action: true, confidenceScore: true, thesis: true },
     }),
-    prisma.thesisChangeEvent.findFirst({
-      orderBy: { createdAt: 'desc' },
-      select: { symbol: true, changeType: true, whatChanged: true, createdAt: true },
-    }),
+    // Scoped to the active account — an unscoped query here could surface a
+    // thesis change from any account in the database (see the identical
+    // fix on lib/domain/intelligence.ts).
+    accountId
+      ? prisma.thesisChangeEvent.findFirst({
+          where: { thesis: { holding: { accountId } } },
+          orderBy: { createdAt: 'desc' },
+          select: { symbol: true, changeType: true, whatChanged: true, createdAt: true },
+        })
+      : null,
     prisma.earningsEvent.findMany({
       where: { reportDate: { gte: new Date() } },
       orderBy: { reportDate: 'asc' },
       take: 3,
       select: { symbol: true, reportDate: true, fiscalPeriod: true, fiscalYear: true },
     }),
-    prisma.recommendation.findMany({
-      where: { userDecision: { not: 'PENDING' } },
-      orderBy: { userDecisionAt: 'desc' },
-      take: 3,
-      select: { symbol: true, action: true, userDecision: true, userDecisionAt: true },
-    }),
+    accountId
+      ? prisma.recommendation.findMany({
+          where: { userDecision: { not: 'PENDING' }, holding: { accountId } },
+          orderBy: { userDecisionAt: 'desc' },
+          take: 3,
+          select: { symbol: true, action: true, userDecision: true, userDecisionAt: true },
+        })
+      : [],
   ]);
 
   const highestConviction = topRecommendation.length

@@ -4,6 +4,7 @@ import ActionBadge from '@/components/ActionBadge';
 import RecommendationCard from '@/components/RecommendationCard';
 import FadeInView from '@/components/motion/FadeInView';
 import { formatPercent } from '@/lib/format';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { setRecommendationDecision } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -23,14 +24,23 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
     ? (searchParams.decision ?? 'ALL')
     : 'ALL';
 
+  // Scoped to the active account — an unscoped query here showed
+  // recommendations from any account in the database (see the identical
+  // fix on lib/domain/intelligence.ts and app/(app)/holdings/page.tsx).
+  const accountId = await getActiveAccountId();
   const [scorecard, recommendations] = await Promise.all([
     prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
-    prisma.recommendation.findMany({
-      where: filter === 'ALL' ? undefined : { userDecision: filter as 'PENDING' | 'ACCEPTED' | 'PARTIALLY_ACCEPTED' | 'REJECTED' | 'DEFERRED' },
-      include: { outcome: true, holding: { include: { thesis: { include: { convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 1 } } } } } },
-      orderBy: { generatedAt: 'desc' },
-      take: 100,
-    }),
+    accountId
+      ? prisma.recommendation.findMany({
+          where: {
+            holding: { accountId },
+            ...(filter === 'ALL' ? {} : { userDecision: filter as 'PENDING' | 'ACCEPTED' | 'PARTIALLY_ACCEPTED' | 'REJECTED' | 'DEFERRED' }),
+          },
+          include: { outcome: true, holding: { include: { thesis: { include: { convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 1 } } } } } },
+          orderBy: { generatedAt: 'desc' },
+          take: 100,
+        })
+      : [],
   ]);
 
   return (

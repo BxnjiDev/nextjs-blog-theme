@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { Thesis, ThesisChangeEvent, NewsItem } from '@prisma/client';
+import { getActiveAccountId } from './portfolio';
 
 export type ConvictionTrend = 'IMPROVING' | 'STABLE' | 'WEAKENING' | 'UNKNOWN';
 
@@ -18,17 +19,25 @@ export interface HoldingIntelligenceSummary {
  * current vs. previous conviction, trend classification, latest thesis
  * change, and the most material recent news. */
 export async function getPortfolioIntelligence(): Promise<HoldingIntelligenceSummary[]> {
-  const holdings = await prisma.holding.findMany({
-    include: {
-      thesis: {
+  // Scoped to the active account for the same reason as every other page
+  // resolving "the" portfolio (see lib/domain/portfolio.ts) — an unscoped
+  // query here showed holdings from any account in the database, including
+  // leftover seed/demo accounts, instead of just the real active one.
+  const accountId = await getActiveAccountId();
+  const holdings = accountId
+    ? await prisma.holding.findMany({
+        where: { accountId },
         include: {
-          convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 2 },
-          changeEvents: { orderBy: { createdAt: 'desc' }, take: 1 },
+          thesis: {
+            include: {
+              convictionAssessments: { orderBy: { generatedAt: 'desc' }, take: 2 },
+              changeEvents: { orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
         },
-      },
-    },
-    orderBy: { symbol: 'asc' },
-  });
+        orderBy: { symbol: 'asc' },
+      })
+    : [];
 
   const results: HoldingIntelligenceSummary[] = [];
   for (const h of holdings) {
