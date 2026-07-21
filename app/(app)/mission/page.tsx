@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ShieldCheck, Target, Brain, GitBranch, Compass } from 'lucide-react';
 import { EVALUATION_RULES_SUMMARY, EVALUATION_MAX_CAPITAL } from '@/lib/domain/evaluationConfig';
 import FadeInView from '@/components/motion/FadeInView';
@@ -81,7 +82,9 @@ export default function MissionPage() {
 
       {/* Honest placeholder — no fake checklist state, since there's no
           reminders/checklist/calendar data model yet. Signals direction
-          without pretending to persist anything. */}
+          without pretending to persist anything, and links to /briefing,
+          which already generates the real content this page will
+          eventually surface directly. */}
       <FadeInView>
         <div className="atlas-glass rounded-2xl p-6">
           <div className="flex items-center gap-2 text-atlas-text-secondary">
@@ -89,9 +92,13 @@ export default function MissionPage() {
             <h2 className="text-sm font-medium text-atlas-text">Atlas Daily — coming soon</h2>
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-tertiary">
-            Today&rsquo;s priority objectives, a trading checklist, personal reminders, and eventually calendar
-            integration will live here once Atlas&rsquo;s reasoning layer is wired in — not before, so nothing on
-            this page pretends to track something it isn&rsquo;t actually tracking yet.
+            A trading checklist, personal reminders, and calendar integration will live here once that layer is
+            built — not before, so nothing on this page pretends to track something it isn&rsquo;t actually
+            tracking yet. The portfolio-side content this page will eventually lead with already exists on{' '}
+            <Link href="/briefing" className="text-atlas-cyan underline">
+              today&rsquo;s Daily Briefing
+            </Link>
+            .
           </p>
         </div>
       </FadeInView>
