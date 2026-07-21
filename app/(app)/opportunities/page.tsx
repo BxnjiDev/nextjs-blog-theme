@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import ConfidenceBadge from '@/components/ConfidenceBadge';
+import ConfidenceMeter from '@/components/intelligence/ConfidenceMeter';
+import FadeInView from '@/components/motion/FadeInView';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ const edgeLabels: Record<string, string> = {
 const edgeStyles: Record<string, string> = {
   FAVORS_OPPORTUNITY: 'text-risk-low',
   FAVORS_HOLDING: 'text-risk-high',
-  NEUTRAL: 'text-gray-500',
+  NEUTRAL: 'text-atlas-text-tertiary',
 };
 
 export default async function OpportunitiesPage() {
@@ -31,46 +32,47 @@ export default async function OpportunitiesPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Opportunities</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Candidates not currently held — undervalued names, emerging trends, and improving
-          fundamentals worth a closer look.
+    <div className="space-y-8">
+      <FadeInView>
+        <h1 className="text-xl font-semibold tracking-tight text-atlas-text">Opportunities</h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-atlas-text-secondary">
+          Candidates not currently held — undervalued names, emerging trends, and improving fundamentals worth a
+          closer look.
         </p>
-      </div>
+      </FadeInView>
 
-      {opportunities.length === 0 && (
-        <p className="text-sm text-gray-500">No opportunities identified yet.</p>
-      )}
+      {opportunities.length === 0 && <p className="text-sm text-atlas-text-tertiary">No opportunities identified yet.</p>}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {opportunities.map((o) => (
-          <div key={o.id} className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-            <div className="flex items-start justify-between">
+      <div className="divide-y divide-atlas-border-subtle">
+        {opportunities.map((o, i) => (
+          <FadeInView key={o.id} delay={Math.min(i * 0.04, 0.24)}>
+            <div className="grid gap-4 py-5 sm:grid-cols-[1fr_180px]">
               <div>
-                <h2 className="font-semibold">
-                  {o.symbol} <span className="font-normal text-gray-500">— {o.name}</span>
-                </h2>
-                <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-base font-semibold text-atlas-text">{o.symbol}</h2>
+                  <span className="text-sm text-atlas-text-tertiary">{o.name}</span>
+                </div>
+                <span className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">
                   {categoryLabels[o.category] ?? o.category}
                 </span>
-              </div>
-              <ConfidenceBadge score={o.confidenceScore} />
-            </div>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">{o.thesis}</p>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">{o.thesis}</p>
 
-            {o.comparisons[0] && (
-              <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
-                <p className={`text-xs font-medium ${edgeStyles[o.comparisons[0].overallEdge]}`}>
-                  vs. {o.comparisons[0].comparedToSymbol}: {edgeLabels[o.comparisons[0].overallEdge]}
-                </p>
-                <pre className="mt-1 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
-                  {o.comparisons[0].narrative}
-                </pre>
+                {o.comparisons[0] && (
+                  <div className="mt-3 border-t border-atlas-border-subtle pt-3">
+                    <p className={`text-xs font-medium ${edgeStyles[o.comparisons[0].overallEdge]}`}>
+                      vs. {o.comparisons[0].comparedToSymbol}: {edgeLabels[o.comparisons[0].overallEdge]}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-atlas-text-tertiary">
+                      {o.comparisons[0].narrative}
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+              <div className="sm:pt-1">
+                <ConfidenceMeter score={o.confidenceScore} max={10} label="Confidence" />
+              </div>
+            </div>
+          </FadeInView>
         ))}
       </div>
     </div>
