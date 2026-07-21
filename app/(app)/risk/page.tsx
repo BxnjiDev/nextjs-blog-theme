@@ -5,6 +5,7 @@ import SectionHeading from '@/components/ui/SectionHeading';
 import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+import RiskRadar from '@/components/charts/RiskRadar';
 import FadeInView from '@/components/motion/FadeInView';
 import { atlasStateForScore } from '@/lib/theme/tone';
 
@@ -23,6 +24,24 @@ const COMPONENT_LABELS: Record<string, string> = {
   macroRisk: 'Macro sensitivity',
   newsRisk: 'News/controversy',
   stalenessRisk: 'Data staleness',
+};
+
+// Short labels for the radar's twelve spokes — the full COMPONENT_LABELS
+// names (used in the accessible Meter list below) are too long to sit
+// around a circle without overlapping.
+const RADAR_LABELS: Record<string, string> = {
+  concentrationRisk: 'Concentration',
+  sectorRisk: 'Sector',
+  volatilityRisk: 'Volatility',
+  betaRisk: 'Beta',
+  drawdownRisk: 'Drawdown',
+  valuationRisk: 'Valuation',
+  earningsRisk: 'Earnings',
+  regulatoryRisk: 'Regulatory',
+  liquidityRisk: 'Liquidity',
+  macroRisk: 'Macro',
+  newsRisk: 'News',
+  stalenessRisk: 'Staleness',
 };
 
 export default async function RiskPage() {
@@ -78,6 +97,21 @@ export default async function RiskPage() {
                 <SectionHeading className="mb-2">Trend</SectionHeading>
                 <TrendLineChart data={chartData} domain={[0, 100]} color="#f0a020" />
               </div>
+            </div>
+          </FadeInView>
+
+          {/* The risk shape — twelve independent factors read as a
+              silhouette instead of a scanned list, so which *kind* of risk
+              dominates the portfolio right now is visible at a glance. */}
+          <FadeInView delay={0.08}>
+            <div className="border-t border-atlas-border-subtle pt-8">
+              <SectionHeading className="mb-2">Risk shape</SectionHeading>
+              <RiskRadar
+                data={Object.entries(RADAR_LABELS).map(([key, label]) => ({
+                  label,
+                  score: (risk as unknown as Record<string, number>)[key],
+                }))}
+              />
             </div>
           </FadeInView>
 

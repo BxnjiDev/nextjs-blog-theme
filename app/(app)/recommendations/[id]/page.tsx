@@ -3,41 +3,17 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import FreshnessStrip from '@/components/FreshnessStrip';
 import Meter from '@/components/ui/Meter';
+import Badge from '@/components/ui/Badge';
+import StatStrip, { Stat } from '@/components/ui/Stat';
+import DecisionPanel from '@/components/recommendations/DecisionPanel';
 import FadeInView from '@/components/motion/FadeInView';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 import { normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { formatPercent } from '@/lib/format';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
+import { ACTION_TONE, ACTION_LABEL, GATE_STATUS_TONE, CHECK_STATUS_TONE, TONE_TEXT } from '@/lib/theme/tone';
 
 export const dynamic = 'force-dynamic';
-
-const DIRECTIVE_STYLES: Record<string, string> = {
-  BUY_MORE: 'border-atlas-emerald/30 text-atlas-emerald',
-  HOLD: 'border-atlas-border text-atlas-text-secondary',
-  REDUCE: 'border-atlas-warning/30 text-atlas-warning',
-  SELL: 'border-risk-high/30 text-risk-high',
-  WATCH: 'border-atlas-steel/30 text-atlas-steel',
-};
-
-const DIRECTIVE_LABELS: Record<string, string> = {
-  BUY_MORE: 'Buy more',
-  HOLD: 'Hold',
-  REDUCE: 'Reduce',
-  SELL: 'Sell',
-  WATCH: 'Watch closely',
-};
-
-const DATA_QUALITY_STYLES: Record<string, string> = {
-  PASS: 'text-risk-low',
-  PASS_WITH_WARNINGS: 'text-risk-medium',
-  BLOCKED: 'text-risk-high',
-};
-
-const CHECK_STATUS_STYLES: Record<string, string> = {
-  ok: 'text-risk-low',
-  warning: 'text-risk-medium',
-  blocking: 'text-risk-high',
-};
 
 interface CalibrationBucket {
   label: string;
@@ -102,17 +78,16 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
               <span className="ml-3 text-lg font-normal text-atlas-text-tertiary">{recommendation.holding.name}</span>
             </h1>
           </div>
-          <span
-            className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider ${DIRECTIVE_STYLES[recommendation.action] ?? DIRECTIVE_STYLES.HOLD}`}
-          >
-            {DIRECTIVE_LABELS[recommendation.action] ?? recommendation.action}
-          </span>
+          <Badge tone={ACTION_TONE[recommendation.action] ?? 'neutral'} variant="outline" className="shrink-0">
+            {ACTION_LABEL[recommendation.action] ?? recommendation.action}
+          </Badge>
         </div>
 
-        <p className="mt-3 text-xs text-atlas-text-tertiary">
-          Generated {recommendation.generatedAt.toLocaleString()} · decision:{' '}
-          {recommendation.userDecision.replace(/_/g, ' ').toLowerCase()}
-        </p>
+        <p className="mt-3 text-xs text-atlas-text-tertiary">Generated {recommendation.generatedAt.toLocaleString()}</p>
+
+        <div className="mt-4">
+          <DecisionPanel recommendationId={recommendation.id} currentDecision={recommendation.userDecision} />
+        </div>
       </FadeInView>
 
       <FreshnessStrip sources={freshness} />
@@ -121,15 +96,15 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
         <div>
           <div className="mb-2 flex items-center gap-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-atlas-text-tertiary">Data quality gate</p>
-            <span className={`text-xs font-semibold ${DATA_QUALITY_STYLES[recommendation.dataQualityStatus]}`}>
+            <Badge tone={GATE_STATUS_TONE[recommendation.dataQualityStatus] ?? 'muted'}>
               {recommendation.dataQualityStatus.replace(/_/g, ' ')}
-            </span>
+            </Badge>
           </div>
           {dataQualityChecks.length > 0 && (
             <ul className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
               {dataQualityChecks.map((c) => (
                 <li key={c.name} className="flex gap-2">
-                  <span className={`font-medium ${CHECK_STATUS_STYLES[c.status]}`}>{c.name.replace(/_/g, ' ')}:</span>
+                  <span className={`font-medium ${TONE_TEXT[CHECK_STATUS_TONE[c.status] ?? 'muted']}`}>{c.name.replace(/_/g, ' ')}:</span>
                   <span className="text-atlas-text-tertiary">{c.detail}</span>
                 </li>
               ))}
@@ -139,35 +114,28 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
       )}
 
       {/* Key figures — a thin strip, not four separate boxed cards. */}
-      <div className="flex flex-wrap gap-x-10 gap-y-5 border-y border-atlas-border-subtle py-5">
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Overall conviction</p>
-          <p className="mt-1 font-mono text-lg text-atlas-text">{conviction ? `${conviction.overallScore}/100` : 'No data'}</p>
-        </div>
+      <StatStrip>
+        <Stat label="Overall conviction" value={conviction ? `${conviction.overallScore}/100` : 'No data'} />
         <div className="min-w-[160px]">
           <Meter score={recommendation.confidenceScore} max={10} label="Confidence" />
         </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Confidence calibration</p>
-          <p className="mt-1 font-mono text-lg text-atlas-text">
-            {bucket?.actualWinRatePct !== null && bucket?.actualWinRatePct !== undefined ? `${bucket.actualWinRatePct.toFixed(0)}%` : 'No data yet'}
-          </p>
-          <p className="mt-0.5 max-w-xs text-[11px] text-atlas-text-tertiary">
-            {bucket
-              ? `Historical win rate for confidence band ${bucket.label} (n=${bucket.sampleSize})${bucket.note ? ` — ${bucket.note}` : ''}`
-              : 'No graded recommendations in this band yet.'}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Proposed size</p>
-          <p className="mt-1 font-mono text-lg text-atlas-text">
-            {recommendation.proposedDollarAmount !== null ? `$${Number(recommendation.proposedDollarAmount).toFixed(0)}` : 'n/a'}
-          </p>
-          <p className="mt-0.5 text-[11px] text-atlas-text-tertiary">
-            {recommendation.percentageOfPortfolio !== null ? `${recommendation.percentageOfPortfolio.toFixed(1)}% of portfolio` : ''}
-          </p>
-        </div>
-      </div>
+        <Stat
+          label="Confidence calibration"
+          value={bucket?.actualWinRatePct !== null && bucket?.actualWinRatePct !== undefined ? `${bucket.actualWinRatePct.toFixed(0)}%` : 'No data yet'}
+          meta={
+            <span className="max-w-xs">
+              {bucket
+                ? `Historical win rate for confidence band ${bucket.label} (n=${bucket.sampleSize})${bucket.note ? ` — ${bucket.note}` : ''}`
+                : 'No graded recommendations in this band yet.'}
+            </span>
+          }
+        />
+        <Stat
+          label="Proposed size"
+          value={recommendation.proposedDollarAmount !== null ? `$${Number(recommendation.proposedDollarAmount).toFixed(0)}` : 'n/a'}
+          meta={recommendation.percentageOfPortfolio !== null ? `${recommendation.percentageOfPortfolio.toFixed(1)}% of portfolio` : undefined}
+        />
+      </StatStrip>
 
       {/* Bull / base / bear — an editorial left-rule treatment instead of
           three boxed cards, reads like a briefing document's case summary. */}
@@ -244,13 +212,13 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
                 ['365d', recommendation.outcome.return365d, recommendation.outcome.alpha365d],
               ] as const
             ).map(([label, ret, alpha]) => (
-              <div key={label}>
-                <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">{label}</p>
-                <p className={`mt-0.5 font-mono ${ret !== null ? (ret >= 0 ? 'text-risk-low' : 'text-risk-high') : 'text-atlas-text-tertiary'}`}>
-                  {ret !== null ? formatPercent(ret) : 'pending'}
-                </p>
-                {alpha !== null && <p className="font-mono text-xs text-atlas-text-tertiary">α {formatPercent(alpha)}</p>}
-              </div>
+              <Stat
+                key={label}
+                label={label}
+                tone={ret !== null ? (ret >= 0 ? 'positive' : 'negative') : 'muted'}
+                value={ret !== null ? formatPercent(ret) : 'pending'}
+                meta={alpha !== null ? `α ${formatPercent(alpha)}` : undefined}
+              />
             ))}
           </div>
           {recommendation.outcome.lessonsLearned && (

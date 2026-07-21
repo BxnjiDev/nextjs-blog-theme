@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import Badge from '@/components/ui/Badge';
 import { ACTION_TONE, ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
-import TrendLineChart from '@/components/charts/TrendLineChart';
+import ConvictionScrubber from '@/components/intelligence/ConvictionScrubber';
+import EmptyState from '@/components/ui/EmptyState';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import FadeInView from '@/components/motion/FadeInView';
 
@@ -68,7 +69,6 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
   const thesis = holding.thesis;
   const convictions = thesis?.convictionAssessments ?? [];
   const latestConviction = convictions[convictions.length - 1] ?? null;
-  const chartData = convictions.map((c) => ({ label: c.generatedAt.toLocaleDateString(), value: c.overallScore }));
   const latestAccuracy = thesis?.accuracyScores[0] ?? null;
   const recommendations = holding.recommendations;
   const latestRecommendation = recommendations[0] ?? null;
@@ -92,7 +92,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
       </FadeInView>
 
       {!thesis ? (
-        <p className="text-sm text-atlas-text-tertiary">No thesis established yet — pending the next thesis-review job run.</p>
+        <EmptyState>No thesis established yet — pending the next thesis-review job run.</EmptyState>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-3">
@@ -111,7 +111,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
               <p className="text-3xl font-semibold">{thesis.convictionScore}/100</p>
               <Badge tone={scoreTone(thesis.convictionScore, 100)}>Confidence {Math.round(thesis.convictionScore / 10)}/10</Badge>
               <div className="mt-4">
-                <TrendLineChart data={chartData} domain={[0, 100]} />
+                <ConvictionScrubber assessments={convictions} changes={thesis.changeEvents} />
               </div>
             </div>
           </div>
@@ -217,7 +217,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           <div className="atlas-glass rounded-xl p-4">
             <h2 className="mb-3 font-medium">Thesis timeline</h2>
             {thesis.changeEvents.length === 0 ? (
-              <p className="text-sm text-atlas-text-tertiary">No changes recorded yet.</p>
+              <EmptyState compact>No changes recorded yet.</EmptyState>
             ) : (
               <ol className="space-y-4">
                 {thesis.changeEvents.map((event) => (
@@ -288,7 +288,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           <div className="atlas-glass rounded-xl p-4">
             <h2 className="mb-3 font-medium">Recommendation history &amp; performance attribution</h2>
             {recommendations.length === 0 ? (
-              <p className="text-sm text-atlas-text-tertiary">No recommendations generated yet.</p>
+              <EmptyState compact>No recommendations generated yet.</EmptyState>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">

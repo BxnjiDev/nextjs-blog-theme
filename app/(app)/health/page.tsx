@@ -5,6 +5,7 @@ import SectionHeading from '@/components/ui/SectionHeading';
 import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import TrendLineChart from '@/components/charts/TrendLineChart';
+import RiskRadar from '@/components/charts/RiskRadar';
 import FadeInView from '@/components/motion/FadeInView';
 import { atlasStateForScore } from '@/lib/theme/tone';
 
@@ -20,6 +21,18 @@ const COMPONENT_LABELS: Record<string, string> = {
   cashAllocationScore: 'Cash allocation',
   concentrationScore: 'Concentration (inverted)',
   macroExposureScore: 'Macro exposure (inverted)',
+};
+
+const RADAR_LABELS: Record<string, string> = {
+  diversificationScore: 'Diversification',
+  qualityScore: 'Quality',
+  growthScore: 'Growth',
+  riskScore: 'Risk',
+  valuationScore: 'Valuation',
+  sectorBalanceScore: 'Sector bal.',
+  cashAllocationScore: 'Cash',
+  concentrationScore: 'Concentration',
+  macroExposureScore: 'Macro',
 };
 
 export default async function HealthPage() {
@@ -75,6 +88,19 @@ export default async function HealthPage() {
                 <SectionHeading className="mb-2">Trend</SectionHeading>
                 <TrendLineChart data={chartData} domain={[0, 100]} color="#34d399" />
               </div>
+            </div>
+          </FadeInView>
+
+          <FadeInView delay={0.08}>
+            <div className="border-t border-atlas-border-subtle pt-8">
+              <SectionHeading className="mb-2">Health shape</SectionHeading>
+              <RiskRadar
+                color="#34d399"
+                data={Object.entries(RADAR_LABELS).map(([key, label]) => ({
+                  label,
+                  score: (latest as unknown as Record<string, number>)[key],
+                }))}
+              />
             </div>
           </FadeInView>
 

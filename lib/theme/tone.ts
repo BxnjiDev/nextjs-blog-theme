@@ -155,6 +155,15 @@ export const GATE_STATUS_TONE: Record<string, Tone> = {
   BLOCKED: 'negative',
 };
 
+/** Per-check data-quality gate status (Investment Memo's check list) —
+ * same three-tier idea as GATE_STATUS_TONE but keyed by the per-check
+ * enum (ok/warning/blocking) rather than the aggregate status. */
+export const CHECK_STATUS_TONE: Record<string, Tone> = {
+  ok: 'positive',
+  warning: 'warning',
+  blocking: 'negative',
+};
+
 export const CONVICTION_TREND_TONE: Record<string, Tone> = {
   IMPROVING: 'positive',
   STABLE: 'neutral',
@@ -167,6 +176,25 @@ export const CONVICTION_TREND_LABEL: Record<string, string> = {
   STABLE: '● Stable',
   WEAKENING: '▼ Weakening',
   UNKNOWN: 'Not enough history',
+};
+
+/** Portfolio timeline entry types (lib/domain/timeline.ts) — routine
+ * events (sync, news) read as quiet/muted dots on the timeline river,
+ * while events that represent an actual change in judgment or position
+ * (recommendation, transaction, thesis/conviction/risk/health change,
+ * earnings) get a brighter, tone-colored dot — the same "significant vs.
+ * routine" dot-brightness grammar Home's OrbitRow already uses, so the two
+ * pages read as one language rather than two different timeline widgets. */
+export const TIMELINE_TYPE_TONE: Record<string, Tone> = {
+  sync: 'muted',
+  recommendation: 'info',
+  transaction: 'positive',
+  thesis_change: 'warning',
+  conviction_change: 'info',
+  risk_change: 'negative',
+  health_change: 'positive',
+  news: 'muted',
+  earnings: 'warning',
 };
 
 export const DECISION_TONE: Record<string, Tone> = {

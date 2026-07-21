@@ -4,12 +4,12 @@ import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import SectionHeading from '@/components/ui/SectionHeading';
 import StatStrip, { Stat } from '@/components/ui/Stat';
-import { ACTION_TONE, ACTION_LABEL, DECISION_TONE, TONE_TEXT } from '@/lib/theme/tone';
+import { ACTION_TONE, ACTION_LABEL } from '@/lib/theme/tone';
 import RecommendationCard from '@/components/RecommendationCard';
+import DecisionPanel from '@/components/recommendations/DecisionPanel';
 import FadeInView from '@/components/motion/FadeInView';
 import { formatPercent } from '@/lib/format';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
-import { setRecommendationDecision } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,9 +116,8 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
                   <th className="py-3 pr-4 font-medium">Action</th>
                   <th className="py-3 pr-4 font-medium">Confidence</th>
                   <th className="py-3 pr-4 font-medium">Conviction</th>
-                  <th className="py-3 pr-4 font-medium">Decision</th>
                   <th className="py-3 pr-4 font-medium">1d / 7d / 30d</th>
-                  <th className="py-3 font-medium"></th>
+                  <th className="py-3 font-medium">Decision</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,31 +136,13 @@ export default async function RecommendationHistoryPage({ searchParams }: { sear
                       </td>
                       <td className="py-3 pr-4 font-mono text-atlas-text-secondary">{r.confidenceScore}/10</td>
                       <td className="py-3 pr-4 font-mono text-atlas-text-secondary">{conviction !== null ? `${conviction}/100` : 'n/a'}</td>
-                      <td className="py-3 pr-4">
-                        <span className={`text-xs font-medium ${TONE_TEXT[DECISION_TONE[r.userDecision] ?? 'muted']}`}>
-                          {r.userDecision.replace(/_/g, ' ').toLowerCase()}
-                        </span>
-                      </td>
                       <td className="py-3 pr-4 font-mono text-xs text-atlas-text-tertiary">
                         {[r.outcome?.return1d, r.outcome?.return7d, r.outcome?.return30d]
                           .map((v) => (v !== null && v !== undefined ? formatPercent(v) : 'pending'))
                           .join(' / ')}
                       </td>
                       <td className="py-3">
-                        {r.userDecision === 'PENDING' && (
-                          <div className="flex gap-3">
-                            <form action={setRecommendationDecision.bind(null, r.id, 'REJECTED', '')}>
-                              <button type="submit" className="text-xs text-risk-high underline decoration-dotted transition-opacity hover:text-risk-high/80 active:opacity-60">
-                                Reject
-                              </button>
-                            </form>
-                            <form action={setRecommendationDecision.bind(null, r.id, 'DEFERRED', '')}>
-                              <button type="submit" className="text-xs text-atlas-steel underline decoration-dotted transition-opacity hover:text-atlas-steel/80 active:opacity-60">
-                                Defer
-                              </button>
-                            </form>
-                          </div>
-                        )}
+                        <DecisionPanel recommendationId={r.id} currentDecision={r.userDecision} compact />
                       </td>
                     </tr>
                   );
