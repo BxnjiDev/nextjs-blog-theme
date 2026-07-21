@@ -1,87 +1,116 @@
 import Link from 'next/link';
 import { getPortfolioIntelligence } from '@/lib/domain/intelligence';
-import ConfidenceBadge from '@/components/ConfidenceBadge';
-import TrendBadge from '@/components/TrendBadge';
+import ConfidenceMeter from '@/components/intelligence/ConfidenceMeter';
+import FadeInView from '@/components/motion/FadeInView';
 
 export const dynamic = 'force-dynamic';
+
+const TREND_LABEL: Record<string, string> = {
+  IMPROVING: 'Growing confidence',
+  STABLE: 'Stable',
+  WEAKENING: 'Weakening',
+  UNKNOWN: 'Not enough history',
+};
+
+const TREND_COLOR: Record<string, string> = {
+  IMPROVING: 'text-atlas-emerald',
+  STABLE: 'text-atlas-text-tertiary',
+  WEAKENING: 'text-risk-high',
+  UNKNOWN: 'text-atlas-text-tertiary',
+};
 
 export default async function IntelligencePage() {
   const intelligence = await getPortfolioIntelligence();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Portfolio Intelligence</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          A persistent thesis per holding — conviction trend, latest change, top risks/catalysts, and the most
-          material recent news. Updated by the daily thesis-review job, not regenerated from scratch every run.
+    <div className="space-y-14">
+      <FadeInView>
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-atlas-text-tertiary">Intelligence</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-atlas-text">What Atlas is thinking</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-atlas-text-secondary">
+          A persistent thesis per holding — conviction trend, the latest change, top risks and catalysts, and the
+          most material recent news. Updated by the daily thesis-review job, not regenerated from scratch every
+          run.
         </p>
-      </div>
+      </FadeInView>
 
-      {intelligence.length === 0 && <p className="text-sm text-gray-500">No holdings yet.</p>}
+      {intelligence.length === 0 && <p className="text-sm text-atlas-text-tertiary">No holdings yet.</p>}
 
-      <div className="space-y-4">
-        {intelligence.map((h) => (
-          <Link
-            key={h.symbol}
-            href={`/intelligence/${h.symbol}`}
-            className="block rounded-lg border border-gray-200 p-5 transition hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  {h.symbol} <span className="font-normal text-gray-500">— {h.name}</span>
-                </h2>
+      {/* A reasoning timeline, not a grid of cards — each entry reads like
+          a log Atlas kept while thinking about the position. */}
+      <div className="relative">
+        <div className="absolute bottom-0 left-[3px] top-2 hidden w-px bg-atlas-border-subtle sm:block" />
+        <div className="space-y-12">
+          {intelligence.map((h, i) => (
+            <FadeInView key={h.symbol} delay={Math.min(i * 0.06, 0.3)}>
+              <div className="relative sm:pl-8">
+                <span className="absolute left-0 top-2 hidden h-[7px] w-[7px] rounded-full bg-atlas-accent-bright shadow-glow-accent sm:block" />
+
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <Link href={`/intelligence/${h.symbol}`} className="group">
+                    <h2 className="text-2xl font-semibold text-atlas-text transition-colors group-hover:text-atlas-accent-bright">
+                      {h.symbol}
+                    </h2>
+                    <span className="text-sm text-atlas-text-tertiary">{h.name}</span>
+                  </Link>
+                  {h.currentConviction !== null && h.previousConviction !== null && (
+                    <span className={`font-mono text-xs ${TREND_COLOR[h.trend]}`}>
+                      {h.previousConviction} → {h.currentConviction} · {TREND_LABEL[h.trend]}
+                    </span>
+                  )}
+                </div>
+
                 {h.thesis ? (
-                  <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">{h.thesis.originalThesis}</p>
+                  <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-atlas-text-secondary">
+                    {h.thesis.originalThesis}
+                  </p>
                 ) : (
-                  <p className="mt-1 text-sm text-gray-500">No thesis established yet — pending the next thesis-review job run.</p>
+                  <p className="mt-3 text-sm text-atlas-text-tertiary">
+                    No thesis established yet — pending the next thesis-review job run.
+                  </p>
+                )}
+
+                {h.currentConviction !== null && (
+                  <div className="mt-4 max-w-xs">
+                    <ConfidenceMeter score={h.currentConviction} label="Conviction" />
+                  </div>
+                )}
+
+                {h.thesis && (h.thesis.risks || h.thesis.catalysts) && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {h.thesis.risks && (
+                      <span className="rounded-full border border-risk-high/20 bg-risk-high/5 px-2.5 py-1 text-xs text-risk-high/90">
+                        Risk: {h.thesis.risks.length > 60 ? `${h.thesis.risks.slice(0, 60)}…` : h.thesis.risks}
+                      </span>
+                    )}
+                    {h.thesis.catalysts && (
+                      <span className="rounded-full border border-atlas-emerald/20 bg-atlas-emerald/5 px-2.5 py-1 text-xs text-atlas-emerald/90">
+                        Catalyst: {h.thesis.catalysts.length > 60 ? `${h.thesis.catalysts.slice(0, 60)}…` : h.thesis.catalysts}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {h.latestChangeEvent && (
+                  <p className="mt-3 text-xs text-atlas-warning/90">
+                    Last change ({h.latestChangeEvent.createdAt.toLocaleDateString()}):{' '}
+                    {h.latestChangeEvent.changeType.replace(/_/g, ' ').toLowerCase()}
+                  </p>
+                )}
+
+                {h.latestNews.length > 0 && (
+                  <ul className="mt-4 space-y-1 border-t border-atlas-border-subtle pt-3">
+                    {h.latestNews.map((n) => (
+                      <li key={n.id} className="text-sm text-atlas-text-tertiary">
+                        {n.headline} <span className="text-xs">({n.materialityLevel.toLowerCase()})</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
-              <div className="flex flex-col items-end gap-1">
-                {h.currentConviction !== null && <ConfidenceBadge score={Math.round(h.currentConviction / 10)} />}
-                <TrendBadge trend={h.trend} />
-                {h.previousConviction !== null && h.currentConviction !== null && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {h.previousConviction} → {h.currentConviction}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {h.thesis && (
-              <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                <div>
-                  <h3 className="font-medium text-gray-700 dark:text-gray-300">Top risks</h3>
-                  <p className="mt-1 line-clamp-2 text-gray-600 dark:text-gray-400">{h.thesis.risks}</p>
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-700 dark:text-gray-300">Top catalysts</h3>
-                  <p className="mt-1 line-clamp-2 text-gray-600 dark:text-gray-400">{h.thesis.catalysts}</p>
-                </div>
-              </div>
-            )}
-
-            {h.latestChangeEvent && (
-              <p className="mt-3 text-xs font-medium text-risk-medium">
-                Last change ({h.latestChangeEvent.createdAt.toLocaleDateString()}): {h.latestChangeEvent.changeType.replace(/_/g, ' ').toLowerCase()}
-              </p>
-            )}
-
-            {h.latestNews.length > 0 && (
-              <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Latest material news</h3>
-                <ul className="mt-1 space-y-1">
-                  {h.latestNews.map((n) => (
-                    <li key={n.id} className="text-sm text-gray-600 dark:text-gray-400">
-                      {n.headline} <span className="text-xs text-gray-400">({n.materialityLevel.toLowerCase()})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Link>
-        ))}
+            </FadeInView>
+          ))}
+        </div>
       </div>
     </div>
   );
