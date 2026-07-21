@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { resolveAnthropicModel } from '@/lib/integrations';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 import { getGlobalStatus } from '@/lib/domain/globalStatus';
+import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { getSchedulerStatus, JOB_REGISTRY } from '@/lib/domain/scheduler';
+import FadeInView from '@/components/motion/FadeInView';
 import { rerunJob } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +27,7 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-        ok ? 'bg-risk-low/10 text-risk-low' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+        ok ? 'bg-risk-low/10 text-risk-low' : 'bg-atlas-surface-raised text-atlas-text-tertiary'
       }`}
     >
       {label}
@@ -44,12 +46,12 @@ const RUN_STATUS_STYLES: Record<string, string> = {
   SUCCESS: 'bg-risk-low/10 text-risk-low',
   WARNING: 'bg-risk-medium/10 text-risk-medium',
   FAILURE: 'bg-risk-high/10 text-risk-high',
-  RUNNING: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  SKIPPED: 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  RUNNING: 'bg-atlas-cyan/10 text-atlas-cyan',
+  SKIPPED: 'bg-atlas-surface-raised text-atlas-text-tertiary',
 };
 
 const MATCH_STATUS_STYLES: Record<string, string> = {
-  UNMATCHED: 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  UNMATCHED: 'bg-atlas-surface-raised text-atlas-text-tertiary',
   AMOUNT_MISMATCH: 'bg-risk-high/10 text-risk-high',
   QUANTITY_MISMATCH: 'bg-risk-high/10 text-risk-high',
   PRICE_MISMATCH: 'bg-risk-high/10 text-risk-high',
@@ -62,7 +64,7 @@ const MATCH_STATUS_STYLES: Record<string, string> = {
 function FreshnessLine({ freshness }: { freshness: { lastUpdated: Date | null; staleness: string; reliabilityPct: number | null; avgLatencyMs: number | null } | null }) {
   if (!freshness) return null;
   return (
-    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+    <p className="mt-2 text-xs text-atlas-text-tertiary">
       Last updated: {freshness.lastUpdated ? freshness.lastUpdated.toLocaleString() : 'never'} · {STALENESS_LABEL[freshness.staleness] ?? freshness.staleness}
       {freshness.reliabilityPct !== null && (
         <>
@@ -76,11 +78,11 @@ function FreshnessLine({ freshness }: { freshness: { lastUpdated: Date | null; s
 
 function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
-    <div className="flex items-center justify-between rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-      <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+    <div className="flex items-center justify-between border-b border-atlas-border-subtle/60 py-2 text-sm">
+      <span className="text-atlas-text-secondary">{label}</span>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 dark:text-gray-400">{detail}</span>
-        <span className={`h-2 w-2 rounded-full ${ok ? 'bg-risk-low' : 'bg-risk-high'}`} />
+        <span className="font-mono text-xs text-atlas-text-tertiary">{detail}</span>
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ok ? 'bg-risk-low' : 'bg-risk-high'}`} />
       </div>
     </div>
   );
@@ -96,6 +98,14 @@ export default async function ConnectionsPage() {
   const hasEmailChannel = Boolean(process.env.SMTP_HOST && process.env.ALERT_EMAIL_TO);
   const hasWebhookChannel = Boolean(process.env.ALERT_WEBHOOK_URL);
   const hasSyncSecret = Boolean(process.env.SYNC_SECRET);
+
+  // Resolved up front (rather than inside the Promise.all below) so the
+  // "recent sync log" query can be scoped to it — an unscoped
+  // findMany({ orderBy: syncedAt desc }) would show whichever account
+  // synced most recently, not necessarily the real active one. Same class
+  // of bug as the one fixed on Settings/globalStatus earlier and on
+  // /holdings in this same pass.
+  const activeAccountId = await getActiveAccountId();
 
   const [
     edgar,
@@ -139,7 +149,9 @@ export default async function ConnectionsPage() {
     prisma.alertDelivery.findFirst({ orderBy: { createdAt: 'desc' } }),
     prisma.recommendationScorecard.findFirst({ orderBy: { generatedAt: 'desc' } }),
     prisma.account.findFirst({ where: { isEvaluationAccount: true } }),
-    prisma.syncLog.findMany({ orderBy: { syncedAt: 'desc' }, take: 10 }),
+    activeAccountId
+      ? prisma.syncLog.findMany({ where: { accountId: activeAccountId }, orderBy: { syncedAt: 'desc' }, take: 10 })
+      : Promise.resolve([]),
     prisma.dataQualityGateLog.findMany({ where: { status: 'BLOCKED' }, orderBy: { checkedAt: 'desc' }, take: 15 }),
     prisma.manualExecution.findMany({
       where: { matchStatus: { in: ['UNMATCHED', 'AMOUNT_MISMATCH', 'QUANTITY_MISMATCH', 'PRICE_MISMATCH', 'TIMING_MISMATCH'] } },
@@ -159,95 +171,98 @@ export default async function ConnectionsPage() {
   const failedJobs = schedulerStatus.filter((s) => s.lastRun?.status === 'FAILURE');
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Connections &amp; Operations</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+    <div className="space-y-10">
+      <FadeInView>
+        <h1 className="text-xl font-semibold tracking-tight text-atlas-text">Connections &amp; operations</h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-atlas-text-secondary">
           What Atlas is connected to, whether each provider is safe to trust right now, and the full status of every
           background job — scheduled, running, or failed.
         </p>
-      </div>
+      </FadeInView>
 
-      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-3 font-medium">Operating status</h2>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Operating mode</p>
-            <p className={`text-lg font-semibold ${globalStatus.mode === 'live-evaluation' ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+      <FadeInView delay={0.03}>
+        <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Operating mode</p>
+            <p className={`mt-1 font-mono text-lg ${globalStatus.mode === 'live-evaluation' ? 'text-atlas-warning' : 'text-atlas-text'}`}>
               {globalStatus.mode}
             </p>
           </div>
-          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Last Robinhood sync</p>
-            <p className="text-sm font-medium">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Last Robinhood sync</p>
+            <p className="mt-1 font-mono text-lg text-atlas-text">
               {globalStatus.robinhoodSync.lastSyncedAt
                 ? `${globalStatus.robinhoodSync.success ? 'ok' : 'rejected'} · ${globalStatus.robinhoodSync.ageHours!.toFixed(1)}h ago`
                 : 'Never synced'}
             </p>
           </div>
-          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Last complete pipeline run</p>
-            <p className="text-sm font-medium">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Last complete pipeline run</p>
+            <p className="mt-1 font-mono text-lg text-atlas-text">
               {globalStatus.lastFullIntelligenceRunAt ? globalStatus.lastFullIntelligenceRunAt.toLocaleString() : 'Never run'}
             </p>
           </div>
-          <div className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Running / failed jobs</p>
-            <p className="text-sm font-medium">
-              <span className={runningJobs.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}>{runningJobs.length} running</span>
-              {' · '}
-              <span className={failedJobs.length > 0 ? 'text-risk-high' : ''}>{failedJobs.length} failed</span>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Running / failed jobs</p>
+            <p className="mt-1 font-mono text-lg">
+              <span className={runningJobs.length > 0 ? 'text-atlas-cyan' : 'text-atlas-text'}>{runningJobs.length} running</span>
+              <span className="text-atlas-text-tertiary"> · </span>
+              <span className={failedJobs.length > 0 ? 'text-risk-high' : 'text-atlas-text'}>{failedJobs.length} failed</span>
             </p>
           </div>
         </div>
         {globalStatus.mode === 'live-evaluation' && (
-          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-3 text-xs text-atlas-warning">
             Live-evaluation mode — recommendations are blocked rather than generated from mock market data,
             fundamentals, or a stale account. See &ldquo;Data-quality blocks&rdquo; below for any that were.
           </p>
         )}
-      </section>
+      </FadeInView>
 
-      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+      <FadeInView delay={0.06}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-medium">Scheduled jobs</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Reruns here are always safe — every job is read/analyze/record only, never able to submit a trade
-            (see <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/executionBoundary.test.ts</code>).
+          <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Scheduled jobs</h2>
+          <p className="text-xs text-atlas-text-tertiary">
+            Reruns here are always safe — every job is read/analyze/record only, never able to submit a trade (see{' '}
+            <code className="rounded bg-atlas-surface-raised px-1">lib/domain/executionBoundary.test.ts</code>).
           </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-left text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                <th className="py-1 pr-2">Job</th>
-                <th className="py-1 pr-2">Enabled</th>
-                <th className="py-1 pr-2">Status</th>
-                <th className="py-1 pr-2">Last run</th>
-                <th className="py-1 pr-2">Duration</th>
-                <th className="py-1 pr-2">Retry attempts</th>
-                <th className="py-1 pr-2"></th>
+              <tr className="border-b border-atlas-border-subtle text-left text-[11px] uppercase tracking-wide text-atlas-text-tertiary">
+                <th className="py-2 pr-4 font-medium">Job</th>
+                <th className="py-2 pr-4 font-medium">Enabled</th>
+                <th className="py-2 pr-4 font-medium">Status</th>
+                <th className="py-2 pr-4 font-medium">Last run</th>
+                <th className="py-2 pr-4 font-medium">Duration</th>
+                <th className="py-2 pr-4 font-medium">Retry attempts</th>
+                <th className="py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {schedulerStatus.map((s) => (
-                <tr key={s.jobName} className="border-b border-gray-50 dark:border-gray-900">
-                  <td className="py-1.5 pr-2 font-medium">{s.label}</td>
-                  <td className="py-1.5 pr-2">{s.enabled ? 'yes' : 'disabled'}</td>
-                  <td className="py-1.5 pr-2">
+                <tr key={s.jobName} className="border-b border-atlas-border-subtle/60 text-atlas-text transition-colors hover:bg-atlas-surface-hover">
+                  <td className="py-2 pr-4 font-medium">{s.label}</td>
+                  <td className="py-2 pr-4 text-xs text-atlas-text-tertiary">{s.enabled ? 'yes' : 'disabled'}</td>
+                  <td className="py-2 pr-4">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RUN_STATUS_STYLES[s.locked ? 'RUNNING' : s.lastRun?.status ?? 'SKIPPED']}`}>
                       {s.locked ? 'RUNNING' : (s.lastRun?.status ?? 'never run')}
                     </span>
                   </td>
-                  <td className="py-1.5 pr-2 text-xs text-gray-500 dark:text-gray-400">
+                  <td className="py-2 pr-4 text-xs text-atlas-text-tertiary">
                     {s.lastRun ? `${s.lastRun.startedAt.toLocaleString()} (${s.lastRun.trigger})` : '—'}
                     {s.lastRun?.error && <p className="text-risk-high">{s.lastRun.error}</p>}
                   </td>
-                  <td className="py-1.5 pr-2 text-xs text-gray-500 dark:text-gray-400">{s.lastRun?.durationMs !== null && s.lastRun?.durationMs !== undefined ? `${s.lastRun.durationMs}ms` : '—'}</td>
-                  <td className="py-1.5 pr-2 text-xs text-gray-500 dark:text-gray-400">{s.lastRun ? 1 : 0}</td>
-                  <td className="py-1.5 pr-2">
+                  <td className="py-2 pr-4 font-mono text-xs text-atlas-text-tertiary">{s.lastRun?.durationMs !== null && s.lastRun?.durationMs !== undefined ? `${s.lastRun.durationMs}ms` : '—'}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-atlas-text-tertiary">{s.lastRun ? 1 : 0}</td>
+                  <td className="py-2">
                     <form action={rerunJob.bind(null, s.jobName)}>
-                      <button type="submit" disabled={s.locked} className="rounded border border-gray-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-gray-700">
+                      <button
+                        type="submit"
+                        disabled={s.locked}
+                        className="rounded-lg border border-atlas-border px-2 py-1 text-xs text-atlas-text-secondary transition-all hover:border-atlas-accent/40 hover:text-atlas-text active:scale-[0.95] disabled:opacity-40"
+                      >
                         {s.locked ? 'Running…' : 'Rerun'}
                       </button>
                     </form>
@@ -257,56 +272,58 @@ export default async function ConnectionsPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          For a full accounting from the terminal (including run-all): <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run scheduler -- status</code>.
-          Scheduling itself runs via launchd/cron — see <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">launchd/README.md</code>.
+        <p className="mt-3 text-xs text-atlas-text-tertiary">
+          For a full accounting from the terminal (including run-all): <code className="rounded bg-atlas-surface-raised px-1">npm run scheduler -- status</code>.
+          Scheduling itself runs via launchd/cron — see <code className="rounded bg-atlas-surface-raised px-1">launchd/README.md</code>.
         </p>
         {Object.keys(JOB_REGISTRY).length !== schedulerStatus.length && (
-          <p className="mt-1 text-xs text-risk-medium">Job registry / status count mismatch — check lib/domain/scheduler.ts.</p>
+          <p className="mt-1 text-xs text-atlas-warning">Job registry / status count mismatch — check lib/domain/scheduler.ts.</p>
         )}
-      </section>
+      </FadeInView>
 
       {recentBlockedGates.length > 0 && (
-        <section className="rounded-lg border border-risk-high/30 p-4 dark:border-risk-high/40">
-          <h2 className="mb-3 font-medium text-risk-high">Data-quality blocks</h2>
-          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-            Recommendations the data-quality gate (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/dataQualityGate.ts</code>)
-            refused to generate — no fabricated recommendation was created for any of these.
-          </p>
-          <ul className="space-y-2 text-xs">
-            {recentBlockedGates.map((g) => {
-              const checks = g.checks as unknown as { name: string; status: string; detail: string }[];
-              const blocking = checks.filter((c) => c.status === 'blocking');
-              return (
-                <li key={g.id} className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{g.symbol}</span>
-                    <span className="text-gray-500 dark:text-gray-400">{g.checkedAt.toLocaleString()}</span>
-                  </div>
-                  <p className="mt-1 text-gray-600 dark:text-gray-400">{blocking.map((c) => c.detail).join(' ')}</p>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        <FadeInView delay={0.09}>
+          <div className="rounded-xl border border-risk-high/20 bg-risk-high/5 p-4">
+            <h2 className="mb-3 text-sm font-medium text-risk-high">Data-quality blocks</h2>
+            <p className="mb-3 text-xs text-atlas-text-tertiary">
+              Recommendations the data-quality gate (<code className="rounded bg-atlas-surface-raised px-1">lib/domain/dataQualityGate.ts</code>)
+              refused to generate — no fabricated recommendation was created for any of these.
+            </p>
+            <ul className="space-y-2 text-xs">
+              {recentBlockedGates.map((g) => {
+                const checks = g.checks as unknown as { name: string; status: string; detail: string }[];
+                const blocking = checks.filter((c) => c.status === 'blocking');
+                return (
+                  <li key={g.id} className="border-t border-atlas-border-subtle/60 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-atlas-text">{g.symbol}</span>
+                      <span className="text-atlas-text-tertiary">{g.checkedAt.toLocaleString()}</span>
+                    </div>
+                    <p className="mt-1 text-atlas-text-secondary">{blocking.map((c) => c.detail).join(' ')}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </FadeInView>
       )}
 
       {unresolvedExecutions.length > 0 && (
-        <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+        <FadeInView delay={0.12}>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-medium">Unmatched manual executions &amp; reconciliation warnings</h2>
-            <a href="/executions" className="text-xs underline">
+            <h2 className="text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Unmatched manual executions &amp; reconciliation warnings</h2>
+            <a href="/executions" className="text-xs text-atlas-accent-bright underline">
               Record / view all →
             </a>
           </div>
           <ul className="space-y-2 text-xs">
             {unresolvedExecutions.map((e) => (
-              <li key={e.id} className="flex items-start justify-between gap-3 rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+              <li key={e.id} className="flex items-start justify-between gap-3 border-b border-atlas-border-subtle/60 pb-2">
                 <div>
-                  <span className="font-medium">
+                  <span className="font-medium text-atlas-text">
                     {e.symbol} · {e.side} · {Number(e.quantity)} sh @ ${Number(e.executionPrice).toFixed(2)}
                   </span>
-                  <p className="mt-1 text-gray-600 dark:text-gray-400">{e.reconciliationNote ?? 'Awaiting next sync.'}</p>
+                  <p className="mt-1 text-atlas-text-tertiary">{e.reconciliationNote ?? 'Awaiting next sync.'}</p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 font-medium ${MATCH_STATUS_STYLES[e.matchStatus] ?? ''}`}>
                   {e.matchStatus.replace(/_/g, ' ')}
@@ -314,94 +331,38 @@ export default async function ConnectionsPage() {
               </li>
             ))}
           </ul>
-        </section>
+        </FadeInView>
       )}
 
-      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-3 font-medium">System health</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <HealthRow
-            label="Last portfolio refresh"
-            ok={Boolean(latestSnapshot)}
-            detail={latestSnapshot ? latestSnapshot.date.toLocaleDateString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last recommendation generated"
-            ok={Boolean(latestRecommendation)}
-            detail={latestRecommendation ? latestRecommendation.generatedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last briefing"
-            ok={Boolean(latestBriefing)}
-            detail={latestBriefing ? latestBriefing.date.toLocaleDateString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last SEC filing alert"
-            ok={Boolean(secFreshness?.lastUpdated)}
-            detail={secFreshness?.lastUpdated ? secFreshness.lastUpdated.toLocaleString() : 'None yet'}
-          />
-          <HealthRow
-            label="Last news item stored"
-            ok={Boolean(newsFreshness?.lastUpdated)}
-            detail={newsFreshness?.lastUpdated ? newsFreshness.lastUpdated.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last risk assessment"
-            ok={Boolean(latestRisk)}
-            detail={latestRisk ? latestRisk.generatedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last thesis review"
-            ok={Boolean(latestThesisReview)}
-            detail={latestThesisReview ? latestThesisReview.lastReviewedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last portfolio health score"
-            ok={Boolean(latestHealth)}
-            detail={latestHealth ? latestHealth.generatedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last outcome evaluation"
-            ok={Boolean(latestOutcome)}
-            detail={latestOutcome ? latestOutcome.lastEvaluatedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last opportunity comparison"
-            ok={Boolean(latestOpportunityComparison)}
-            detail={latestOpportunityComparison ? latestOpportunityComparison.generatedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last fundamentals ingest"
-            ok={Boolean(fundamentalsFreshness?.lastUpdated)}
-            detail={fundamentalsFreshness?.lastUpdated ? fundamentalsFreshness.lastUpdated.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last earnings-calendar update"
-            ok={Boolean(latestEarningsEvent)}
-            detail={latestEarningsEvent ? latestEarningsEvent.updatedAt.toLocaleString() : 'Never run'}
-          />
-          <HealthRow
-            label="Last alert delivery attempt"
-            ok={Boolean(latestAlertDelivery)}
-            detail={latestAlertDelivery ? `${latestAlertDelivery.status} @ ${latestAlertDelivery.createdAt.toLocaleString()}` : 'Never run'}
-          />
-          <HealthRow
-            label="Last scorecard/learning run"
-            ok={Boolean(latestScorecard)}
-            detail={latestScorecard ? latestScorecard.generatedAt.toLocaleString() : 'Never run'}
-          />
+      <FadeInView delay={0.15}>
+        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">System health</h2>
+        <div className="grid gap-x-8 sm:grid-cols-2">
+          <HealthRow label="Last portfolio refresh" ok={Boolean(latestSnapshot)} detail={latestSnapshot ? latestSnapshot.date.toLocaleDateString() : 'Never run'} />
+          <HealthRow label="Last recommendation generated" ok={Boolean(latestRecommendation)} detail={latestRecommendation ? latestRecommendation.generatedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last briefing" ok={Boolean(latestBriefing)} detail={latestBriefing ? latestBriefing.date.toLocaleDateString() : 'Never run'} />
+          <HealthRow label="Last SEC filing alert" ok={Boolean(secFreshness?.lastUpdated)} detail={secFreshness?.lastUpdated ? secFreshness.lastUpdated.toLocaleString() : 'None yet'} />
+          <HealthRow label="Last news item stored" ok={Boolean(newsFreshness?.lastUpdated)} detail={newsFreshness?.lastUpdated ? newsFreshness.lastUpdated.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last risk assessment" ok={Boolean(latestRisk)} detail={latestRisk ? latestRisk.generatedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last thesis review" ok={Boolean(latestThesisReview)} detail={latestThesisReview ? latestThesisReview.lastReviewedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last portfolio health score" ok={Boolean(latestHealth)} detail={latestHealth ? latestHealth.generatedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last outcome evaluation" ok={Boolean(latestOutcome)} detail={latestOutcome ? latestOutcome.lastEvaluatedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last opportunity comparison" ok={Boolean(latestOpportunityComparison)} detail={latestOpportunityComparison ? latestOpportunityComparison.generatedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last fundamentals ingest" ok={Boolean(fundamentalsFreshness?.lastUpdated)} detail={fundamentalsFreshness?.lastUpdated ? fundamentalsFreshness.lastUpdated.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last earnings-calendar update" ok={Boolean(latestEarningsEvent)} detail={latestEarningsEvent ? latestEarningsEvent.updatedAt.toLocaleString() : 'Never run'} />
+          <HealthRow label="Last alert delivery attempt" ok={Boolean(latestAlertDelivery)} detail={latestAlertDelivery ? `${latestAlertDelivery.status} @ ${latestAlertDelivery.createdAt.toLocaleString()}` : 'Never run'} />
+          <HealthRow label="Last scorecard/learning run" ok={Boolean(latestScorecard)} detail={latestScorecard ? latestScorecard.generatedAt.toLocaleString() : 'Never run'} />
         </div>
         {!hasCronSecret && (
-          <p className="mt-3 text-xs text-risk-medium">
-            CRON_SECRET is not set — the /api/jobs/* routes will refuse every request (including
-            Vercel Cron) until it&rsquo;s configured. The local scheduler (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run scheduler</code>) doesn&rsquo;t need it.
+          <p className="mt-3 text-xs text-atlas-warning">
+            CRON_SECRET is not set — the /api/jobs/* routes will refuse every request (including Vercel Cron) until
+            it&rsquo;s configured. The local scheduler (<code className="rounded bg-atlas-surface-raised px-1">npm run scheduler</code>) doesn&rsquo;t need it.
           </p>
         )}
-      </section>
+      </FadeInView>
 
-      <section className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <h2 className="mb-3 font-medium">Live-evaluation account sync</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
+      <FadeInView delay={0.18}>
+        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Live-evaluation account sync</h2>
+        <div className="grid gap-x-8 sm:grid-cols-2">
           <HealthRow label="Evaluation account connected" ok={Boolean(evaluationAccount)} detail={evaluationAccount ? evaluationAccount.externalId : 'Never synced'} />
           <HealthRow
             label="Last sync"
@@ -410,25 +371,25 @@ export default async function ConnectionsPage() {
           />
         </div>
         {!hasSyncSecret && (
-          <p className="mt-3 text-xs text-risk-medium">
+          <p className="mt-3 text-xs text-atlas-warning">
             SYNC_SECRET is not set — the /api/sync/account route will refuse every request until it&rsquo;s
-            configured. The CLI (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run sync:account</code>) doesn&rsquo;t need it, since it
+            configured. The CLI (<code className="rounded bg-atlas-surface-raised px-1">npm run sync:account</code>) doesn&rsquo;t need it, since it
             writes to the database directly rather than over HTTP.
           </p>
         )}
         {recentSyncLogs.length > 0 && (
-          <div className="mt-3">
-            <h3 className="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Recent sync log</h3>
+          <div className="mt-4">
+            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-atlas-text-tertiary">Recent sync log</h3>
             <ul className="space-y-2 text-xs">
               {recentSyncLogs.map((log) => (
-                <li key={log.id} className="rounded border border-gray-100 px-3 py-2 dark:border-gray-800">
+                <li key={log.id} className="border-b border-atlas-border-subtle/60 pb-2">
                   <div className="flex items-center justify-between">
                     <span className={log.success ? 'text-risk-low' : 'text-risk-high'}>{log.success ? 'Success' : 'Rejected'}</span>
-                    <span className="text-gray-500 dark:text-gray-400">
+                    <span className="text-atlas-text-tertiary">
                       {log.syncedAt.toLocaleString()} · {log.source} · v{log.schemaVersion}
                     </span>
                   </div>
-                  <p className="mt-1 text-gray-600 dark:text-gray-400">
+                  <p className="mt-1 text-atlas-text-secondary">
                     +{log.recordsAdded} added, {log.recordsUpdated} updated, {log.recordsSkipped} skipped
                   </p>
                   {Array.isArray(log.errors) && log.errors.length > 0 && (
@@ -442,140 +403,134 @@ export default async function ConnectionsPage() {
             </ul>
           </div>
         )}
-      </section>
+      </FadeInView>
 
-      <div className="space-y-4">
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Robinhood Agentic Trading (brokerage + execution)</h2>
-            <StatusPill ok={Boolean(evaluationAccount)} label={evaluationAccount ? 'Evaluation account synced' : 'Not connected in this app'} />
+      <FadeInView delay={0.2}>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">Providers</h2>
+        <div className="space-y-4">
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">Robinhood Agentic Trading (brokerage + execution)</h3>
+              <StatusPill ok={Boolean(evaluationAccount)} label={evaluationAccount ? 'Evaluation account synced' : 'Not connected in this app'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              This is an MCP connector, not an API key stored by this app. Connect it to the agent session driving
+              Atlas with:
+            </p>
+            <pre className="mt-2 overflow-x-auto rounded-lg bg-atlas-surface-raised p-3 text-xs text-atlas-text-secondary">
+              claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading
+            </pre>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Once connected, the agent can read the account (holdings, cash, transactions, open orders) and report
+              it to Atlas via <code className="rounded bg-atlas-surface-raised px-1">npm run sync:account</code> (local CLI) or{' '}
+              <code className="rounded bg-atlas-surface-raised px-1">POST /api/sync/account</code> — see{' '}
+              <code className="rounded bg-atlas-surface-raised px-1">lib/domain/accountSync.ts</code>. Atlas never holds Robinhood
+              credentials, session tokens, or MCP secrets, and never submits an order — every trade is placed
+              manually. See the banner at the top of every page, and &ldquo;Execution boundary&rdquo; in ARCHITECTURE.md.
+            </p>
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            This is an MCP connector, not an API key stored by this app. Connect it to the agent
-            session driving Atlas with:
-          </p>
-          <pre className="mt-2 overflow-x-auto rounded bg-gray-100 p-3 text-xs dark:bg-gray-900">
-            claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mcp/trading
-          </pre>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Once connected, the agent can read the account (holdings, cash, transactions, open orders)
-            and report it to Atlas via <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run sync:account</code> (local
-            CLI) or <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">POST /api/sync/account</code> — see{' '}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/domain/accountSync.ts</code>. Atlas never holds
-            Robinhood credentials, session tokens, or MCP secrets, and never submits an order — every
-            trade is placed manually. See the banner at the top of every page, and
-            &ldquo;Execution boundary&rdquo; in ARCHITECTURE.md.
-          </p>
-        </div>
 
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Market data — Twelve Data (quotes, historical, fundamentals)</h2>
-            <StatusPill ok={hasMarketDataKey} label={hasMarketDataKey ? 'Key configured' : 'Mock data'} />
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">Market data — Twelve Data (quotes, historical, fundamentals)</h3>
+              <StatusPill ok={hasMarketDataKey} label={hasMarketDataKey ? 'Key configured' : 'Mock data'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Set <code className="rounded bg-atlas-surface-raised px-1">MARKET_DATA_API_KEY</code> with a{' '}
+              <a href="https://twelvedata.com" className="text-atlas-accent-bright underline" target="_blank" rel="noreferrer">
+                Twelve Data
+              </a>{' '}
+              key. Quotes are labeled &ldquo;Delayed&rdquo; (not real-time) even when live. A configured key that
+              errors mid-request retries with backoff, then falls back to mock data for that call only — every
+              attempt is logged to ProviderCallLog. Run <code className="rounded bg-atlas-surface-raised px-1">npm run providers:check</code> for
+              a live authenticated check (not run automatically on this page, to avoid pinging providers — including
+              billed Anthropic calls — on every page load).
+            </p>
+            <FreshnessLine freshness={marketDataFreshness} />
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">MARKET_DATA_API_KEY</code> with a{' '}
-            <a href="https://twelvedata.com" className="underline" target="_blank" rel="noreferrer">
-              Twelve Data
-            </a>{' '}
-            key. Quotes are labeled &ldquo;Delayed&rdquo; (not real-time) even when live. A configured key that
-            errors mid-request retries with backoff, then falls back to mock data for that call only —
-            every attempt is logged to ProviderCallLog. Run <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">npm run providers:check</code> for a live
-            authenticated check (not run automatically on this page, to avoid pinging providers — including billed
-            Anthropic calls — on every page load).
-          </p>
-          <FreshnessLine freshness={marketDataFreshness} />
-        </div>
 
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">AI reasoning — Claude (recommendation generation)</h2>
-            <StatusPill
-              ok={hasAnthropicKey}
-              label={hasAnthropicKey ? `Claude configured (${resolveAnthropicModel()})` : 'Heuristic fallback'}
-            />
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">AI reasoning — Claude (recommendation generation)</h3>
+              <StatusPill ok={hasAnthropicKey} label={hasAnthropicKey ? `Claude configured (${resolveAnthropicModel()})` : 'Heuristic fallback'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Set <code className="rounded bg-atlas-surface-raised px-1">ANTHROPIC_API_KEY</code> to generate real thesis/bull/bear/risk
+              analysis (structured output). Model is configured via{' '}
+              <code className="rounded bg-atlas-surface-raised px-1">ANTHROPIC_MODEL</code> (default claude-opus-4-8) and validated at
+              startup — an unsupported value fails immediately with a clear error rather than a confusing failure
+              deep in a background job. Without a key, the recommendation job stores a clearly-labeled data summary
+              instead of fabricated analysis.
+            </p>
+            <FreshnessLine freshness={claudeFreshness} />
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ANTHROPIC_API_KEY</code> to generate
-            real thesis/bull/bear/risk analysis (structured output). Model is configured via{' '}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ANTHROPIC_MODEL</code> (default{' '}
-            claude-opus-4-8) and validated at startup — an unsupported value fails immediately with a
-            clear error rather than a confusing failure deep in a background job. Without a key, the
-            recommendation job stores a clearly-labeled data summary instead of fabricated analysis.
-          </p>
-          <FreshnessLine freshness={claudeFreshness} />
-        </div>
 
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Financial news — Finnhub (company, sector &amp; market coverage)</h2>
-            <StatusPill ok={hasNewsKey} label={hasNewsKey ? 'Key configured' : 'Mock data (empty feed)'} />
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">Financial news — Finnhub (company, sector &amp; market coverage)</h3>
+              <StatusPill ok={hasNewsKey} label={hasNewsKey ? 'Key configured' : 'Mock data (empty feed)'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Set <code className="rounded bg-atlas-surface-raised px-1">NEWS_API_KEY</code> with a{' '}
+              <a href="https://finnhub.io" className="text-atlas-accent-bright underline" target="_blank" rel="noreferrer">
+                Finnhub
+              </a>{' '}
+              key. Sentiment and materiality are computed deterministically from the real fetched text (see{' '}
+              <code className="rounded bg-atlas-surface-raised px-1">lib/integrations/newsScoring.ts</code>) — never invented. Sector
+              coverage (AI, semiconductors, defense, aerospace, robotics, data centers, energy, cybersecurity) is
+              sourced via representative sector-ETF company news, documented in{' '}
+              <code className="rounded bg-atlas-surface-raised px-1">lib/integrations/news.ts</code>.
+            </p>
+            <FreshnessLine freshness={newsFreshness} />
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">NEWS_API_KEY</code> with a{' '}
-            <a href="https://finnhub.io" className="underline" target="_blank" rel="noreferrer">
-              Finnhub
-            </a>{' '}
-            key. Sentiment and materiality are computed deterministically from the real fetched text (see{' '}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/newsScoring.ts</code>) — never
-            invented. Sector coverage (AI, semiconductors, defense, aerospace, robotics, data centers, energy,
-            cybersecurity) is sourced via representative sector-ETF company news, documented in{' '}
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/news.ts</code>.
-          </p>
-          <FreshnessLine freshness={newsFreshness} />
-        </div>
 
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Fundamentals — Financial Modeling Prep (statements, ratios, ownership, earnings)</h2>
-            <StatusPill ok={hasFundamentalsKey} label={hasFundamentalsKey ? 'Key configured' : 'Mock data'} />
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">Fundamentals — Financial Modeling Prep (statements, ratios, ownership, earnings)</h3>
+              <StatusPill ok={hasFundamentalsKey} label={hasFundamentalsKey ? 'Key configured' : 'Mock data'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Set <code className="rounded bg-atlas-surface-raised px-1">FUNDAMENTALS_API_KEY</code> with a{' '}
+              <a href="https://financialmodelingprep.com" className="text-atlas-accent-bright underline" target="_blank" rel="noreferrer">
+                Financial Modeling Prep
+              </a>{' '}
+              key. Powers the historical financial-statement/ratio ingestion (
+              <code className="rounded bg-atlas-surface-raised px-1">lib/jobs/ingestFundamentals.ts</code>) and the forward earnings calendar
+              (<code className="rounded bg-atlas-surface-raised px-1">lib/jobs/ingestEarnings.ts</code>), which together populate the
+              revenue-growth and balance-sheet conviction categories that were previously unavailable.
+            </p>
+            <FreshnessLine freshness={fundamentalsFreshness} />
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">FUNDAMENTALS_API_KEY</code> with a{' '}
-            <a href="https://financialmodelingprep.com" className="underline" target="_blank" rel="noreferrer">
-              Financial Modeling Prep
-            </a>{' '}
-            key. Powers the historical financial-statement/ratio ingestion (
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/ingestFundamentals.ts</code>) and the forward earnings
-            calendar (<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/jobs/ingestEarnings.ts</code>), which together
-            populate the revenue-growth and balance-sheet conviction categories that were previously unavailable.
-          </p>
-          <FreshnessLine freshness={fundamentalsFreshness} />
-        </div>
 
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Alert delivery — email &amp; webhook</h2>
-            <StatusPill
-              ok={hasEmailChannel || hasWebhookChannel}
-              label={hasEmailChannel || hasWebhookChannel ? 'At least one channel configured' : 'No channel configured'}
-            />
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">Alert delivery — email &amp; webhook</h3>
+              <StatusPill ok={hasEmailChannel || hasWebhookChannel} label={hasEmailChannel || hasWebhookChannel ? 'At least one channel configured' : 'No channel configured'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Set <code className="rounded bg-atlas-surface-raised px-1">SMTP_HOST</code>/<code className="rounded bg-atlas-surface-raised px-1">ALERT_EMAIL_TO</code> for
+              email (any SMTP server) and/or <code className="rounded bg-atlas-surface-raised px-1">ALERT_WEBHOOK_URL</code> for a webhook.
+              Delivery runs through provider interfaces (
+              <code className="rounded bg-atlas-surface-raised px-1">lib/integrations/notifications.ts</code>) completely separate from alert
+              generation — adding Slack/Discord/SMS/push later means adding one provider class, not touching the
+              alert engine. Without any channel configured, alerts are still generated and stored, just not
+              delivered anywhere.
+            </p>
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Set <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">SMTP_HOST</code>/<code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ALERT_EMAIL_TO</code> for
-            email (any SMTP server) and/or <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">ALERT_WEBHOOK_URL</code> for a
-            webhook. Delivery runs through provider interfaces (
-            <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">lib/integrations/notifications.ts</code>) completely separate from
-            alert generation — adding Slack/Discord/SMS/push later means adding one provider class, not touching the alert engine.
-            Without any channel configured, alerts are still generated and stored, just not delivered anywhere.
-          </p>
-        </div>
 
-        <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">SEC EDGAR filings</h2>
-            <StatusPill ok={edgar.ok} label={edgar.ok ? 'Live (public API)' : 'Unreachable'} />
+          <div className="atlas-glass rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-atlas-text">SEC EDGAR filings</h3>
+              <StatusPill ok={edgar.ok} label={edgar.ok ? 'Live (public API)' : 'Unreachable'} />
+            </div>
+            <p className="mt-2 text-sm text-atlas-text-secondary">
+              Already implemented against the real public EDGAR API — no key required, just a contact User-Agent.{' '}
+              {hasEdgarUserAgent ? 'A custom User-Agent is configured.' : 'Set SEC_EDGAR_USER_AGENT with a real contact email before relying on this in production.'}
+            </p>
+            <FreshnessLine freshness={secFreshness} />
           </div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Already implemented against the real public EDGAR API — no key required, just a
-            contact User-Agent.{' '}
-            {hasEdgarUserAgent
-              ? 'A custom User-Agent is configured.'
-              : 'Set SEC_EDGAR_USER_AGENT with a real contact email before relying on this in production.'}
-          </p>
-          <FreshnessLine freshness={secFreshness} />
         </div>
-      </div>
+      </FadeInView>
     </div>
   );
 }
