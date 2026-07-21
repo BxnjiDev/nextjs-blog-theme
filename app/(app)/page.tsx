@@ -1,10 +1,7 @@
+import Link from 'next/link';
 import { getHomeDashboardData } from '@/lib/domain/homeDashboard';
 import { getPerformanceSummary } from '@/lib/domain/performance';
 import { prisma } from '@/lib/prisma';
-import StatWidget from '@/components/home/StatWidget';
-import MarketStatusWidget from '@/components/home/MarketStatusWidget';
-import ProviderStatusWidget from '@/components/home/ProviderStatusWidget';
-import LatestSyncWidget from '@/components/home/LatestSyncWidget';
 import UpcomingEarningsWidget from '@/components/home/UpcomingEarningsWidget';
 import ThesisChangeWidget from '@/components/home/ThesisChangeWidget';
 import TodaysFocusWidget from '@/components/home/TodaysFocusWidget';
@@ -16,7 +13,9 @@ import WidgetCard from '@/components/home/WidgetCard';
 import AutoRefresh from '@/components/AutoRefresh';
 import FadeInView from '@/components/motion/FadeInView';
 import NarrativeSummary from '@/components/home/NarrativeSummary';
+import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import { buildHomeNarrative } from '@/lib/copy/homeNarrative';
+import { formatRelativeTime } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,25 +53,71 @@ export default async function HomePage() {
         </div>
       </FadeInView>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatWidget
-          title="Portfolio health"
-          value={data.portfolioHealth ? `${data.portfolioHealth.overallScore}/100` : 'No data'}
-          sublabel={data.portfolioHealth?.previousScore != null ? `Previously ${data.portfolioHealth.previousScore}/100` : undefined}
-          tone={data.portfolioHealth && data.portfolioHealth.overallScore >= 60 ? 'positive' : data.portfolioHealth ? 'negative' : 'neutral'}
-          numericValue={data.portfolioHealth ? data.portfolioHealth.overallScore : undefined}
-          format={data.portfolioHealth ? 'score100' : undefined}
-        />
-        <StatWidget
-          title="Cash available"
-          value={data.portfolio ? formatCurrency(data.portfolio.cashBalance) : 'No data'}
-          sublabel={data.portfolio ? `of ${formatCurrency(data.portfolio.totalValue)} total` : undefined}
-          numericValue={data.portfolio ? data.portfolio.cashBalance : undefined}
-          format={data.portfolio ? 'currency0' : undefined}
-        />
-        <MarketStatusWidget market={data.market} />
-        <LatestSyncWidget sync={data.status.robinhoodSync} />
-      </div>
+      {/* Thin hairline strip, not four equal boxes — the same composition
+          used on Portfolio/Risk/Health, so the four numbers that matter
+          most read as one instrument panel instead of a fourth of a
+          generic admin-dashboard grid. */}
+      <FadeInView delay={0.05}>
+        <div className="flex flex-wrap gap-x-10 gap-y-4 border-y border-atlas-border-subtle py-5">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Portfolio health</p>
+            {data.portfolioHealth ? (
+              <>
+                <AnimatedNumber
+                  value={data.portfolioHealth.overallScore}
+                  format="score100"
+                  className={`mt-1 font-mono text-lg ${data.portfolioHealth.overallScore >= 60 ? 'text-risk-low' : 'text-risk-high'}`}
+                />
+                {data.portfolioHealth.previousScore != null && (
+                  <p className="mt-0.5 text-xs text-atlas-text-tertiary">Previously {data.portfolioHealth.previousScore}/100</p>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 font-mono text-lg text-atlas-text-tertiary">No data</p>
+            )}
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Cash available</p>
+            {data.portfolio ? (
+              <>
+                <AnimatedNumber value={data.portfolio.cashBalance} format="currency0" className="mt-1 font-mono text-lg text-atlas-text" />
+                <p className="mt-0.5 text-xs text-atlas-text-tertiary">of {formatCurrency(data.portfolio.totalValue)} total</p>
+              </>
+            ) : (
+              <p className="mt-1 font-mono text-lg text-atlas-text-tertiary">No data</p>
+            )}
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Market status</p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                {data.market.isOpen && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-risk-low opacity-60" />}
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${data.market.isOpen ? 'bg-risk-low' : 'bg-atlas-text-tertiary'}`} />
+              </span>
+              <p className="font-mono text-lg text-atlas-text">{data.market.label}</p>
+            </div>
+            <p className="mt-0.5 text-xs text-atlas-text-tertiary">{data.market.detail}</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-atlas-text-tertiary">Latest Robinhood sync</p>
+            <p className={`mt-1 font-mono text-lg ${data.status.robinhoodSync.success === false ? 'text-risk-high' : 'text-atlas-text'}`}>
+              {!data.status.robinhoodSync.lastSyncedAt
+                ? 'Never synced'
+                : data.status.robinhoodSync.success === false
+                  ? 'Last sync rejected'
+                  : `Updated ${formatRelativeTime(data.status.robinhoodSync.lastSyncedAt)}`}
+            </p>
+            <p className="mt-0.5 text-xs text-atlas-text-tertiary">
+              {data.status.robinhoodSync.lastSyncedAt ? (
+                data.status.robinhoodSync.lastSyncedAt.toLocaleString()
+              ) : (
+                'Sync the evaluation account to enable live recommendations.'
+              )}{' '}
+              · <Link href="/connections" className="underline decoration-atlas-border hover:decoration-atlas-accent-bright">Provider details →</Link>
+            </p>
+          </div>
+        </div>
+      </FadeInView>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -105,8 +150,7 @@ export default async function HomePage() {
         <QuickActionsWidget />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ProviderStatusWidget status={data.status} />
+      <div className="grid gap-4 lg:grid-cols-2">
         <PerformanceSnapshotWidget performance={performance} />
         <RecentDecisionsWidget decisions={data.recentDecisions} />
       </div>

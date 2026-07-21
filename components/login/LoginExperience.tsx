@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Eye, EyeOff } from 'lucide-react';
 import BootSequence from './BootSequence';
 import StatusBanner from '@/components/StatusBanner';
 
@@ -20,6 +21,7 @@ export default function LoginExperience({
   hasError: boolean;
 }) {
   const [booted, setBooted] = useState(hasError);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-atlas-canvas px-6">
@@ -63,15 +65,25 @@ export default function LoginExperience({
             <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-atlas-text-secondary">
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className="w-full rounded-lg border border-atlas-border bg-atlas-surface-raised px-3 py-2 text-sm text-atlas-text placeholder:text-atlas-text-tertiary transition-colors focus:border-atlas-accent/50 focus:outline-none focus:ring-1 focus:ring-atlas-accent/40"
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                className="w-full rounded-lg border border-atlas-border bg-atlas-surface-raised px-3 py-2 pr-10 text-sm text-atlas-text placeholder:text-atlas-text-tertiary transition-colors focus:border-atlas-accent/50 focus:outline-none focus:ring-1 focus:ring-atlas-accent/40"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-atlas-text-tertiary transition-colors hover:text-atlas-text-secondary"
+              >
+                {showPassword ? <EyeOff size={15} strokeWidth={1.75} /> : <Eye size={15} strokeWidth={1.75} />}
+              </button>
+            </div>
           </div>
 
           {hasError && <StatusBanner variant="error">Invalid email or password.</StatusBanner>}

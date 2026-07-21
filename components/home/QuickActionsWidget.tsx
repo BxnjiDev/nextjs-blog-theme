@@ -12,7 +12,7 @@ const ACTIONS = [
 export default function QuickActionsWidget() {
   return (
     <WidgetCard title="Quick actions">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {ACTIONS.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}

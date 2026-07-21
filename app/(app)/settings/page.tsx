@@ -44,8 +44,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: { s
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-atlas-text">Settings</h1>
-        <p className="mt-1 text-sm text-atlas-text-secondary">Account, operating mode, and operational tools.</p>
+        <h1 className="text-xl font-semibold tracking-tight text-atlas-text">Settings</h1>
+        <p className="mt-1.5 text-sm text-atlas-text-secondary">Account, operating mode, and operational tools.</p>
       </div>
 
       <div className="rounded-xl border border-atlas-border bg-atlas-surface p-5">
