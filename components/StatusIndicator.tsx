@@ -34,7 +34,7 @@ function sourcePill(label: string, source: GlobalStatus['marketData']) {
 export default function StatusIndicator({ status }: { status: GlobalStatus }) {
   const modeStyle =
     status.mode === 'live-evaluation'
-      ? 'bg-amber-500/10 text-amber-400'
+      ? 'bg-atlas-warning/10 text-atlas-warning'
       : 'bg-atlas-surface-raised text-atlas-text-tertiary';
 
   const syncStyle = !status.robinhoodSync.lastSyncedAt

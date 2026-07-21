@@ -34,19 +34,37 @@ const PRIMARY_LINKS = [
 
 // Every pre-Atlas-OS page still exists and still works — these just aren't
 // part of the primary 9-item nav the design brief asks for, so they live in
-// a de-emphasized, collapsible group instead of disappearing.
-const MORE_LINKS = [
-  { href: '/holdings', label: 'Holdings' },
-  { href: '/risk', label: 'Risk' },
-  { href: '/health', label: 'Health' },
-  { href: '/opportunities', label: 'Opportunities' },
-  { href: '/compare', label: 'Compare' },
-  { href: '/simulator', label: 'Simulator' },
-  { href: '/scorecard', label: 'Scorecard' },
-  { href: '/briefing', label: 'Daily Briefing' },
-  { href: '/executions', label: 'Executions' },
-  { href: '/connections', label: 'Connections' },
+// a de-emphasized, collapsible group instead of disappearing. Grouped by
+// what the page is for (in plain language, not by data model) rather than
+// left as one flat list of ten.
+const MORE_GROUPS = [
+  {
+    label: 'Analysis',
+    links: [
+      { href: '/holdings', label: 'Holdings' },
+      { href: '/risk', label: 'Risk' },
+      { href: '/health', label: 'Health' },
+      { href: '/opportunities', label: 'Opportunities' },
+      { href: '/compare', label: 'Compare' },
+      { href: '/simulator', label: 'Simulator' },
+    ],
+  },
+  {
+    label: 'Reports',
+    links: [
+      { href: '/scorecard', label: 'Scorecard' },
+      { href: '/briefing', label: 'Daily Briefing' },
+    ],
+  },
+  {
+    label: 'Operations',
+    links: [
+      { href: '/executions', label: 'Executions' },
+      { href: '/connections', label: 'Connections' },
+    ],
+  },
 ];
+const MORE_LINKS = MORE_GROUPS.flatMap((g) => g.links);
 
 function isActive(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
@@ -121,22 +139,31 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
-              <div className="space-y-0.5 pb-2 pt-0.5">
-                {MORE_LINKS.map(({ href, label }) => {
-                  const active = isActive(pathname, href);
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={onNavigate}
-                      className={`block rounded-lg px-2.5 py-1.5 text-sm transition-colors ${
-                        active ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-secondary hover:bg-atlas-surface-hover hover:text-atlas-text'
-                      }`}
-                    >
-                      {label}
-                    </Link>
-                  );
-                })}
+              <div className="space-y-2.5 pb-2 pt-1">
+                {MORE_GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <p className="px-2.5 pb-1 text-[10px] font-medium uppercase tracking-wide text-atlas-text-tertiary/70">
+                      {group.label}
+                    </p>
+                    <div className="space-y-0.5">
+                      {group.links.map(({ href, label }) => {
+                        const active = isActive(pathname, href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={onNavigate}
+                            className={`block rounded-lg px-2.5 py-1.5 text-sm transition-colors ${
+                              active ? 'bg-atlas-surface-raised text-atlas-text' : 'text-atlas-text-secondary hover:bg-atlas-surface-hover hover:text-atlas-text'
+                            }`}
+                          >
+                            {label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           )}
