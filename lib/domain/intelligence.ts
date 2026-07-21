@@ -17,8 +17,11 @@ export interface HoldingIntelligenceSummary {
 
 /** Assembles the per-holding intelligence summary shown on /intelligence:
  * current vs. previous conviction, trend classification, latest thesis
- * change, and the most material recent news. */
-export async function getPortfolioIntelligence(): Promise<HoldingIntelligenceSummary[]> {
+ * change, and the most material recent news. Also the Decision Engine's
+ * (lib/decision/) source for the same conviction-trend read — pass
+ * `symbol` to scope the query to one holding instead of refetching this
+ * same thesis/conviction/news shape with separate logic. */
+export async function getPortfolioIntelligence(options?: { symbol?: string }): Promise<HoldingIntelligenceSummary[]> {
   // Scoped to the active account for the same reason as every other page
   // resolving "the" portfolio (see lib/domain/portfolio.ts) — an unscoped
   // query here showed holdings from any account in the database, including
@@ -26,7 +29,7 @@ export async function getPortfolioIntelligence(): Promise<HoldingIntelligenceSum
   const accountId = await getActiveAccountId();
   const holdings = accountId
     ? await prisma.holding.findMany({
-        where: { accountId },
+        where: { accountId, ...(options?.symbol ? { symbol: options.symbol } : {}) },
         include: {
           thesis: {
             include: {
