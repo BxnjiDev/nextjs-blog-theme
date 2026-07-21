@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 /**
  * An "open" grouping of several small widgets — a hairline top border and
@@ -31,7 +32,7 @@ export default function OpenSection({
       initial={{ opacity: 0, y: 10 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.4, delay, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: MOTION.duration.panel, delay, ease: MOTION.ease.standard }}
       className="border-t border-atlas-border-subtle pt-6"
     >
       <h2 className="mb-5 text-xs font-medium uppercase tracking-wide text-atlas-text-tertiary">{title}</h2>

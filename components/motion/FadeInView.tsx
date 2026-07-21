@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, type Variants } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 const variants: Variants = {
   hidden: { opacity: 0, y: 14 },
@@ -32,7 +33,7 @@ export default function FadeInView({
       initial="hidden"
       whileInView="visible"
       viewport={{ once, margin: '-40px' }}
-      transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: MOTION.duration.panel, delay, ease: MOTION.ease.standard }}
     >
       {children}
     </motion.div>

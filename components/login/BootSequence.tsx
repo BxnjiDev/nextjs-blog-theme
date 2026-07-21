@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import OrbitalField from '@/components/atlas-identity/OrbitalField';
+import { MOTION } from '@/lib/motion/tokens';
 
 // Short enough to "avoid unnecessarily delaying repeat users," long enough
 // for the arrival moment to breathe. The Skip control covers anyone who
@@ -40,14 +41,14 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
     <motion.div
       key="boot"
       exit={{ opacity: 0, scale: 1.06, filter: 'blur(10px)' }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.6, ease: MOTION.ease.standard }}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-atlas-canvas"
     >
       <div className="pointer-events-none absolute inset-0 bg-atlas-aurora" />
 
       <div className="relative flex items-center justify-center">
         <OrbitalField size={280} variant="resolving" className="absolute" />
-        <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}>
+        <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: MOTION.duration.login, ease: MOTION.ease.standard }}>
           <AtlasCore state="verifying" size="xl" />
         </motion.div>
       </div>

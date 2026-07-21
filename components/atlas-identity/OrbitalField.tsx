@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 /**
  * Thin, restrained orbital rings — the one recurring Atlas motif for
@@ -29,9 +30,9 @@ export default function OrbitalField({
   const vb = 400;
   const c = vb / 2;
   const rings = [
-    { r: 120, opacity: 0.26, width: 1, dash: '1 7', duration: 70 },
-    { r: 152, opacity: 0.16, width: 1, dash: '0.5 11', duration: 95 },
-    { r: 182, opacity: 0.1, width: 1, dash: '2 4', duration: 130 },
+    { r: 120, opacity: 0.26, width: 1, dash: '1 7', duration: MOTION.duration.orbitSlow },
+    { r: 152, opacity: 0.16, width: 1, dash: '0.5 11', duration: MOTION.duration.orbitMedium },
+    { r: 182, opacity: 0.1, width: 1, dash: '2 4', duration: MOTION.duration.orbitFast },
   ];
 
   return (
@@ -70,14 +71,14 @@ export default function OrbitalField({
           }
           transition={
             reduceMotion
-              ? { duration: 0.4 }
+              ? { duration: MOTION.duration.stage }
               : variant === 'resolving'
                 ? {
-                    opacity: { duration: 0.7, delay: i * 0.16 },
-                    scale: { duration: 0.7, delay: i * 0.16, ease: [0.16, 1, 0.3, 1] },
-                    rotate: { duration: ring.duration, repeat: Infinity, ease: 'linear' },
+                    opacity: { duration: MOTION.duration.login, delay: i * 0.16 },
+                    scale: { duration: MOTION.duration.login, delay: i * 0.16, ease: MOTION.ease.standard },
+                    rotate: { duration: ring.duration, repeat: Infinity, ease: MOTION.ease.linear },
                   }
-                : { duration: ring.duration, repeat: Infinity, ease: 'linear' }
+                : { duration: ring.duration, repeat: Infinity, ease: MOTION.ease.linear }
           }
         />
       ))}

@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, type Variants } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 const container: Variants = {
   hidden: {},
@@ -9,7 +10,7 @@ const container: Variants = {
 
 const item: Variants = {
   hidden: { opacity: 0, y: 14 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: MOTION.duration.panel, ease: MOTION.ease.standard } },
 };
 
 /** Wrap a grid/list of cards in <StaggerGroup>; wrap each card in

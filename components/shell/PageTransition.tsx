@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 /** Subtle fade+rise on route change — the whole "smooth transitions" ask
  * from the design brief, kept to one small, cheap animation rather than a
@@ -20,7 +21,7 @@ export default function PageTransition({ children }: { children: React.ReactNode
         initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: reduceMotion ? 0.08 : 0.16, ease: 'easeOut' }}
+        transition={{ duration: reduceMotion ? MOTION.duration.micro / 2 : MOTION.duration.page, ease: MOTION.ease.out }}
       >
         {children}
       </motion.div>

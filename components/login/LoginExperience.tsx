@@ -7,6 +7,7 @@ import BootSequence from './BootSequence';
 import StatusBanner from '@/components/StatusBanner';
 import AtlasCore from '@/components/atlas-identity/AtlasCore';
 import OrbitalField from '@/components/atlas-identity/OrbitalField';
+import { MOTION } from '@/lib/motion/tokens';
 
 /**
  * Client wrapper so app/login/page.tsx (a server component, needed to read
@@ -39,7 +40,7 @@ export default function LoginExperience({
       <motion.div
         initial={false}
         animate={booted ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: booted && !hasError ? 0.15 : 0 }}
+        transition={{ duration: MOTION.duration.login, ease: MOTION.ease.standard, delay: booted && !hasError ? 0.15 : 0 }}
         className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col justify-center gap-12 px-6 py-14 lg:flex-row lg:items-center lg:gap-20 lg:px-12"
       >
         {/* Identity + editorial statement */}

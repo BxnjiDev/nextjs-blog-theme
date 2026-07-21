@@ -1,5 +1,6 @@
 'use client';
 
+import { MOTION } from '@/lib/motion/tokens';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 export interface AllocationSlice {
@@ -34,7 +35,7 @@ export default function AllocationDonut({ data, height = 220 }: { data: Allocati
           outerRadius="85%"
           paddingAngle={3}
           isAnimationActive
-          animationDuration={900}
+          animationDuration={MOTION.duration.chart * 1000}
           animationEasing="ease-out"
         >
           {data.map((_, i) => (

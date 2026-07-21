@@ -1,5 +1,6 @@
 'use client';
 
+import { MOTION } from '@/lib/motion/tokens';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 export interface TrendPoint {
@@ -36,7 +37,7 @@ export default function TrendLineChart({
           labelStyle={{ fontWeight: 600, color: '#f7f5fa' }}
           itemStyle={{ color: '#f7f5fa' }}
         />
-        <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} isAnimationActive animationDuration={900} />
+        <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} isAnimationActive animationDuration={MOTION.duration.chart * 1000} />
       </LineChart>
     </ResponsiveContainer>
   );

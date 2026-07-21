@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { MOTION } from '@/lib/motion/tokens';
 
 /**
  * Every Home (and most other) widget renders through this one card shell —
@@ -47,7 +48,7 @@ export default function WidgetCard({
       initial={{ opacity: 0, y: 14 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.45, delay, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: MOTION.duration.panel, delay, ease: MOTION.ease.standard }}
       className={`atlas-glass atlas-hover-glow rounded-xl p-4 transition-[border-color,box-shadow,transform] duration-300 ${className}`}
     >
       {title && (

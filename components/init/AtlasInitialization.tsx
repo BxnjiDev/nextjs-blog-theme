@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import AtlasCore, { type AtlasCoreState } from '@/components/atlas-identity/AtlasCore';
 import OrbitalField from '@/components/atlas-identity/OrbitalField';
 import type { InitializationSummary, ReadinessState } from '@/lib/domain/initializationStatus';
+import { MOTION } from '@/lib/motion/tokens';
 
 const READINESS_PILL: Record<ReadinessState, { label: string; className: string }> = {
   ready: { label: 'Ready', className: 'bg-atlas-emerald/10 text-atlas-emerald' },
@@ -124,7 +125,7 @@ export default function AtlasInitialization({
     <motion.div
       className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-atlas-canvas"
       animate={stage === 'complete' ? { opacity: 0 } : { opacity: 1 }}
-      transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: MOTION.duration.stage, ease: MOTION.ease.standard }}
       role="status"
       aria-live="polite"
     >
@@ -133,7 +134,7 @@ export default function AtlasInitialization({
       <motion.div
         className="relative flex flex-col items-center"
         animate={stage === 'complete' ? { scale: 1.4, opacity: 0 } : { scale: 1, opacity: 1 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.6, ease: MOTION.ease.standard }}
       >
         <div className="relative flex items-center justify-center">
           <OrbitalField
@@ -168,7 +169,7 @@ export default function AtlasInitialization({
                   key={line.label}
                   initial={{ opacity: 0, y: 10, scale: 0.94 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ delay: i * 0.15, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ delay: i * 0.15, duration: MOTION.duration.stage, ease: MOTION.ease.standard }}
                   className="atlas-glass flex items-center gap-2 rounded-full px-3.5 py-1.5"
                 >
                   <span className="text-[11px] text-atlas-text-secondary">{line.label}</span>
