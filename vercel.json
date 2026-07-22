@@ -10,6 +10,7 @@
     { "path": "/api/jobs/recommendations", "schedule": "0 11 * * *" },
     { "path": "/api/jobs/health", "schedule": "20 11 * * *" },
     { "path": "/api/jobs/opportunities", "schedule": "30 11 * * *" },
+    { "path": "/api/jobs/strategy", "schedule": "35 11 * * *" },
     { "path": "/api/jobs/outcomes", "schedule": "40 11 * * *" },
     { "path": "/api/jobs/briefing", "schedule": "50 11 * * *" },
     { "path": "/api/jobs/notify", "schedule": "*/15 * * * *" },

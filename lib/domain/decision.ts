@@ -1,10 +1,15 @@
 import { prisma } from '@/lib/prisma';
+import { marketDataProvider } from '@/lib/integrations';
 import { getActiveAccountId, getPortfolioOverview, type PortfolioOverview } from './portfolio';
 import { getPortfolioIntelligence } from './intelligence';
 import { normalizeExplainability } from './legacyNormalization';
 import { buildDecision, type BuildDecisionInput } from '@/lib/decision/engine';
 import { buildDecisionHistory } from '@/lib/decision/history';
 import type { Decision, DecisionHistoryEntry } from '@/lib/decision/types';
+import { computeTechnicalEvidence } from '@/lib/strategy/technical';
+import { identifyDemandZones } from '@/lib/strategy/supplyDemand';
+import { detectLiquidityEvidence } from '@/lib/strategy/liquidity';
+import type { TechnicalEvidence, DemandZone } from '@/lib/strategy/types';
 
 export interface RelatedPosition {
   symbol: string;
@@ -33,14 +38,26 @@ const NOT_YET_ASSESSED = 'Not yet assessed.';
  * Pass `portfolioOverview` when the caller already has it (Home,
  * /recommendations) to avoid a second full portfolio fetch; omitted
  * callers (the standalone /intelligence/[symbol] page, the chat tool) get
- * one computed here.
+ * one computed here. Likewise pass `technicalEvidence`/`demandZones` when
+ * the caller (the Market Monitoring service, scanning many watchlist
+ * symbols in one pass) has already fetched this symbol's price history —
+ * this avoids a duplicate history fetch per symbol during a bulk scan.
  */
-export async function getDecisionForSymbol(rawSymbol: string, options?: { portfolioOverview?: PortfolioOverview | null }): Promise<SymbolDecisionResult> {
+export async function getDecisionForSymbol(
+  rawSymbol: string,
+  options?: {
+    portfolioOverview?: PortfolioOverview | null;
+    technicalEvidence?: TechnicalEvidence | null;
+    demandZones?: DemandZone[] | null;
+  }
+): Promise<SymbolDecisionResult> {
   const symbol = rawSymbol.toUpperCase();
   const accountId = await getActiveAccountId();
   if (!accountId) return { decision: null, history: [], relatedPositions: [] };
 
-  const [overview, intelligenceRows, holding, latestConvictionRow, changeEvents, nextEarnings, portfolioRiskRow] = await Promise.all([
+  const needsHistory = !(options && ('technicalEvidence' in options || 'demandZones' in options));
+
+  const [overview, intelligenceRows, holding, latestConvictionRow, changeEvents, nextEarnings, portfolioRiskRow, priceHistory, benchmarkHistory] = await Promise.all([
     options && 'portfolioOverview' in options ? Promise.resolve(options.portfolioOverview ?? null) : getPortfolioOverview(),
     getPortfolioIntelligence({ symbol }),
     prisma.holding.findFirst({
@@ -51,7 +68,13 @@ export async function getDecisionForSymbol(rawSymbol: string, options?: { portfo
     prisma.thesisChangeEvent.findMany({ where: { symbol }, orderBy: { createdAt: 'desc' } }),
     prisma.earningsEvent.findFirst({ where: { symbol, isEstimate: true, reportDate: { gte: new Date() } }, orderBy: { reportDate: 'asc' } }),
     prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
+    needsHistory ? marketDataProvider.getHistoricalDaily(symbol, 60) : Promise.resolve([]),
+    needsHistory ? marketDataProvider.getSp500History(60) : Promise.resolve([]),
   ]);
+
+  const technicalEvidence = options && 'technicalEvidence' in options ? (options.technicalEvidence ?? null) : computeTechnicalEvidence(priceHistory, benchmarkHistory);
+  const demandZones = options && 'demandZones' in options ? (options.demandZones ?? null) : identifyDemandZones(priceHistory);
+  const liquidityEvidence = detectLiquidityEvidence();
 
   const summary = intelligenceRows[0] ?? null;
   const recommendations = holding?.recommendations ?? [];
@@ -113,6 +136,9 @@ export async function getDecisionForSymbol(rawSymbol: string, options?: { portfo
       : null,
     daysToNextEarnings,
     latestMaterialNews: latestNews ? { headline: latestNews.headline, materialityLevel: latestNews.materialityLevel, sentiment: latestNews.sentiment } : null,
+    technicalEvidence,
+    demandZones,
+    liquidityEvidence,
   };
 
   const decision = buildDecision(decisionInput);

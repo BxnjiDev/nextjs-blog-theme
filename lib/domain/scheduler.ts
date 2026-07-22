@@ -11,6 +11,7 @@ import { runThesisJob } from '@/lib/jobs/generateThesis';
 import { runRecommendationJob } from '@/lib/jobs/generateRecommendations';
 import { runPortfolioHealthJob } from '@/lib/jobs/generatePortfolioHealth';
 import { runOpportunityComparisonJob } from '@/lib/jobs/generateOpportunityComparisons';
+import { runStrategyMonitoringJob } from '@/lib/jobs/monitorStrategy';
 import { runRecommendationOutcomesJob } from '@/lib/jobs/trackRecommendationOutcomes';
 import { runBriefingJob } from '@/lib/jobs/generateBriefing';
 import { runAlertDeliveryJob } from '@/lib/jobs/deliverAlerts';
@@ -74,6 +75,7 @@ export const JOB_REGISTRY: Record<string, { label: string; run: () => Promise<un
   recommendationGeneration: { label: 'Recommendation generation', run: () => runRecommendationJob() },
   portfolioHealth: { label: 'Portfolio health calculation', run: runPortfolioHealthJob },
   opportunityComparison: { label: 'Opportunity comparison', run: runOpportunityComparisonJob },
+  strategyMonitoring: { label: 'Strategy & market monitoring', run: runStrategyMonitoringJob },
   outcomeTracking: { label: 'Outcome tracking', run: runRecommendationOutcomesJob },
   dailyBriefing: { label: 'Daily briefing', run: runBriefingJob },
   alertDelivery: { label: 'Alert delivery', run: runAlertDeliveryJob },
@@ -97,6 +99,7 @@ export const RUN_ALL_ORDER = [
   'recommendationGeneration',
   'portfolioHealth',
   'opportunityComparison',
+  'strategyMonitoring',
   'outcomeTracking',
   'dailyBriefing',
   'alertDelivery',

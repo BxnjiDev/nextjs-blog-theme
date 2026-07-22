@@ -9,6 +9,7 @@ import { buildMemoryContext } from '@/lib/domain/memory';
 import { normalizeBriefingPortfolioSummary, normalizeBriefingMarketRecap, normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { getTodaysFocus } from '@/lib/intelligence/todaysFocus';
 import { getDecisionForSymbol } from '@/lib/domain/decision';
+import { getMarketMonitoringSnapshot } from '@/lib/domain/monitoring';
 import { toJsonSafe } from './serialize';
 
 export interface ToolResult {
@@ -167,6 +168,19 @@ async function getDecision(input: { symbol: string }) {
   return { decision, history, relatedPositions };
 }
 
+async function scanWatchlist(input: { limit?: number }) {
+  const limit = typeof input.limit === 'number' && input.limit > 0 ? Math.floor(input.limit) : 10;
+  const snapshot = await getMarketMonitoringSnapshot();
+  const errors = snapshot.entries.filter((e) => e.error !== null).map((e) => ({ symbol: e.entry.symbol, error: e.error }));
+  return {
+    scannedAt: snapshot.scannedAt,
+    scannedCount: snapshot.entries.length,
+    opportunityCount: snapshot.rankedOpportunities.length,
+    opportunities: snapshot.rankedOpportunities.slice(0, limit),
+    errors,
+  };
+}
+
 const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   get_portfolio: getPortfolio,
   get_briefing: getBriefing,
@@ -180,6 +194,7 @@ const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   recall_memory: recallMemory,
   get_todays_focus: todaysFocus,
   get_decision: getDecision,
+  scan_watchlist: scanWatchlist,
 };
 
 /** The one place a tool name (as chosen by Claude) turns into an actual

@@ -120,4 +120,13 @@ export const ATLAS_TOOLS: Anthropic.Tool[] = [
       required: ['symbol'],
     },
   },
+  {
+    name: 'scan_watchlist',
+    description:
+      "The Strategy & Market Monitoring Engine's continuous scan of the watchlist (every held position, every actively-tracked Opportunity, plus the curated Magnificent Seven/Technology/Defense/Energy long-term-focus core) — ranked strongest-first. Each result is an Entry Opportunity: strategy classification (long-term core/growth, event-driven swing, tactical swing, risk reduction, rebalance, watch only), trade intent, why now/why not, expected holding window, invalidation conditions, profit-management guidance, and a Potential/Qualified/High-conviction tier — all framed from that symbol's existing Decision (same one get_decision returns for it), never a second scoring path. Use this when asked something like \"what looks interesting right now\" or \"scan the market for setups\" rather than checking symbols one at a time with get_decision.",
+    input_schema: {
+      type: 'object',
+      properties: { limit: { type: 'number', description: 'Max ranked opportunities to return (default 10).' } },
+    },
+  },
 ];

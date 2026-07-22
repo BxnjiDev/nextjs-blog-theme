@@ -3,12 +3,13 @@ import { ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
 import { freshnessFromAge } from '@/lib/intelligence/engine';
 import { computePriorityScore, computeTier } from '@/lib/intelligence/scoring';
 import type { Insight, InsightScores } from '@/lib/intelligence/types';
+import type { TechnicalEvidence, DemandZone, LiquidityEvidence } from '@/lib/strategy/types';
 import { DECISION_ACTION_LABEL, DECISION_ACTION_TONE, type Decision, type DecisionAction, type DecisionFactor } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STALE_AFTER_DAYS = 30;
 const CONCENTRATION_THRESHOLD_PCT = 20;
-const EARNINGS_SOON_DAYS = 7;
+export const EARNINGS_SOON_DAYS = 7;
 const NOT_ASSESSED = 'Not assessed.';
 
 export type ConvictionTrend = 'IMPROVING' | 'STABLE' | 'WEAKENING' | 'UNKNOWN';
@@ -55,6 +56,16 @@ export interface BuildDecisionInput {
   portfolioRisk: { overallScore: number; concentrationRisk: number; sectorRisk: number } | null;
   daysToNextEarnings: number | null;
   latestMaterialNews: DecisionNewsInput | null;
+  /** Market Monitoring Engine evidence (lib/strategy/) — optional and
+   * additive: every existing caller that omits these keeps behaving
+   * exactly as before. When present, they only ever contribute reasoning
+   * factors and a small, capped confidence adjustment — they never
+   * determine the action themselves (see the brief: "technical analysis
+   * should contribute evidence, not override the broader investment
+   * process"). */
+  technicalEvidence?: TechnicalEvidence | null;
+  demandZones?: DemandZone[] | null;
+  liquidityEvidence?: LiquidityEvidence | null;
   now?: Date;
 }
 
@@ -90,7 +101,20 @@ const BULLISH_ACTIONS = new Set<DecisionAction>(['INCREASE', 'INITIATE']);
  */
 export function buildDecision(input: BuildDecisionInput): Decision {
   const now = input.now ?? new Date();
-  const { symbol, isHeld, holdingWeightPct, sector, recommendation, conviction, portfolioRisk, daysToNextEarnings, latestMaterialNews } = input;
+  const {
+    symbol,
+    isHeld,
+    holdingWeightPct,
+    sector,
+    recommendation,
+    conviction,
+    portfolioRisk,
+    daysToNextEarnings,
+    latestMaterialNews,
+    technicalEvidence,
+    demandZones,
+    liquidityEvidence,
+  } = input;
 
   const overrideReasons: string[] = [];
   let action: DecisionAction;
@@ -158,6 +182,36 @@ export function buildDecision(input: BuildDecisionInput): Decision {
     confidence -= 15;
     confidenceReasoning.push('No generated recommendation exists — this read is inferred from thesis/conviction data alone.');
   }
+
+  // --- Technical / supply-demand evidence (Market Monitoring Engine) —
+  // small, capped adjustments only; this never determines the action
+  // itself, and a demand-zone retest never moves confidence on its own —
+  // only when reinforced by otherwise-supportive technical evidence and a
+  // non-weakening thesis, exactly as the brief requires. ---
+  const nearestRetestedZone = demandZones?.find((z) => z.recentlyRetested) ?? null;
+  if (technicalEvidence) {
+    if (!technicalEvidence.available) {
+      confidence -= 5;
+      confidenceReasoning.push('No technical confirmation available for this symbol.');
+    } else {
+      const technicalConflicts =
+        (BULLISH_ACTIONS.has(action) && technicalEvidence.overallTone === 'negative') ||
+        ((action === 'REDUCE' || action === 'EXIT') && technicalEvidence.overallTone === 'positive');
+      const technicalSupports =
+        (BULLISH_ACTIONS.has(action) && technicalEvidence.overallTone === 'positive') ||
+        ((action === 'REDUCE' || action === 'EXIT') && technicalEvidence.overallTone === 'negative');
+      if (technicalConflicts) {
+        confidence -= 6;
+        confidenceReasoning.push('Technical evidence (trend/momentum/relative strength) conflicts with this call.');
+      } else if (technicalSupports && nearestRetestedZone && conviction && conviction.trend !== 'WEAKENING') {
+        confidence += 5;
+        confidenceReasoning.push(
+          `Reinforced by a demand-zone retest near $${nearestRetestedZone.priceLevel.toFixed(2)} alongside supportive technical evidence.`
+        );
+      }
+    }
+  }
+
   if (overrideReasons.length === 0 && confidenceReasoning.length === 0) {
     confidenceReasoning.push('No conflicting signals or missing data detected — confidence reflects the underlying recommendation as generated.');
   }
@@ -240,8 +294,41 @@ export function buildDecision(input: BuildDecisionInput): Decision {
 
   reasoning.push(
     recommendation?.technicalTrend
-      ? { key: 'technical', label: 'Technical context', available: true, tone: 'info', summary: recommendation.technicalTrend }
-      : { key: 'technical', label: 'Technical context', available: false, tone: 'muted', summary: 'No technical trend data available.' }
+      ? { key: 'technical', label: 'Technical context (AI-stated)', available: true, tone: 'info', summary: recommendation.technicalTrend }
+      : { key: 'technical', label: 'Technical context (AI-stated)', available: false, tone: 'muted', summary: 'No technical trend data available.' }
+  );
+
+  // Market Monitoring Engine's deterministic technical read (lib/strategy/
+  // technical.ts) — a separate, price/volume-derived factor from the
+  // AI-stated one above, only added when a caller supplies it.
+  if (technicalEvidence) {
+    reasoning.push(...technicalEvidence.factors);
+  }
+
+  reasoning.push(
+    nearestRetestedZone
+      ? {
+          key: 'supplyDemandContext',
+          label: 'Supply & demand context',
+          available: true,
+          tone: 'info',
+          summary: `Revisiting a demand zone near $${nearestRetestedZone.priceLevel.toFixed(2)} (formed ${nearestRetestedZone.formedAt.toLocaleDateString()}, +${nearestRetestedZone.impulseMovePct.toFixed(1)}% impulse move away from it) — a close-price proxy, not true volume-at-price; increases confidence only alongside other supportive evidence, never on its own.`,
+        }
+      : demandZones && demandZones.length > 0
+        ? {
+            key: 'supplyDemandContext',
+            label: 'Supply & demand context',
+            available: true,
+            tone: 'neutral',
+            summary: `${demandZones.length} historical demand zone${demandZones.length === 1 ? '' : 's'} identified; price is not currently near a retest.`,
+          }
+        : { key: 'supplyDemandContext', label: 'Supply & demand context', available: false, tone: 'muted', summary: 'No demand zones identified in the available price history.' }
+  );
+
+  reasoning.push(
+    liquidityEvidence && !liquidityEvidence.available
+      ? { key: 'liquidityAnalysis', label: 'Liquidity analysis', available: false, tone: 'muted', summary: liquidityEvidence.note }
+      : { key: 'liquidityAnalysis', label: 'Liquidity analysis', available: false, tone: 'muted', summary: 'Liquidity-sweep detection requires intraday/order-flow data this app does not currently ingest.' }
   );
 
   reasoning.push(
