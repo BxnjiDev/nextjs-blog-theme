@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import Badge from '@/components/ui/Badge';
 import { ACTION_TONE, ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
 import FadeInView from '@/components/motion/FadeInView';
+import CompactPriceChart from '@/components/chart/CompactPriceChart';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,7 @@ export default async function HoldingsPage() {
           const rec = h.recommendations[0];
           return (
             <FadeInView key={h.id} delay={Math.min(i * 0.03, 0.2)}>
-              <div id={h.symbol} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div id={h.symbol} className="grid gap-3 py-4 sm:grid-cols-[1fr_96px_auto] sm:items-center">
                 <div>
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="text-base font-semibold text-atlas-text">{h.symbol}</span>
@@ -61,6 +62,10 @@ export default async function HoldingsPage() {
                   ) : (
                     <p className="mt-1.5 text-sm text-atlas-text-tertiary">No analysis generated yet for this holding.</p>
                   )}
+                </div>
+
+                <div className="hidden sm:block">
+                  <CompactPriceChart symbol={h.symbol} interval="1D" height={40} />
                 </div>
 
                 <div className="flex items-center gap-2 sm:flex-col sm:items-end">

@@ -7,6 +7,7 @@ import { assessComparison } from '@/lib/intelligence/engine';
 import { getDecisionForSymbol } from '@/lib/domain/decision';
 import { quickActionForScore } from '@/lib/decision/engine';
 import { DECISION_ACTION_TONE, DECISION_ACTION_LABEL } from '@/lib/decision/types';
+import CompactPriceChart from '@/components/chart/CompactPriceChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,6 +141,12 @@ export default async function ComparePage({ searchParams }: { searchParams: { sy
                     ${r.quote.price.toFixed(2)} ({r.quote.changePercent >= 0 ? '+' : ''}
                     {r.quote.changePercent.toFixed(2)}%, {r.quote.quality})
                   </p>
+                )}
+
+                {!r.isCash && (
+                  <div className="mt-2 max-w-[220px]">
+                    <CompactPriceChart symbol={r.symbol} interval="1D" height={36} />
+                  </div>
                 )}
 
                 {r.conviction && (

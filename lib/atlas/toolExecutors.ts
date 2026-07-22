@@ -9,7 +9,10 @@ import { buildMemoryContext } from '@/lib/domain/memory';
 import { normalizeBriefingPortfolioSummary, normalizeBriefingMarketRecap, normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { getTodaysFocus } from '@/lib/intelligence/todaysFocus';
 import { getDecisionForSymbol } from '@/lib/domain/decision';
-import { getMarketMonitoringSnapshot } from '@/lib/domain/monitoring';
+import { getMarketMonitoringSnapshot, getEntryOpportunityForSymbol } from '@/lib/domain/monitoring';
+import { getSymbolChartContext } from '@/lib/domain/chartContext';
+import { getMultiTimeframeContextForSymbol } from '@/lib/domain/multiTimeframe';
+import { isInterval, type Interval } from '@/lib/marketdata/types';
 import { toJsonSafe } from './serialize';
 
 export interface ToolResult {
@@ -181,6 +184,25 @@ async function scanWatchlist(input: { limit?: number }) {
   };
 }
 
+async function symbolChartContext(input: { symbol: string; interval?: string }) {
+  if (!input.symbol) return { error: 'Provide a symbol.' };
+  const interval: Interval = input.interval && isInterval(input.interval) ? input.interval : '1D';
+  return getSymbolChartContext(input.symbol, interval);
+}
+
+async function multiTimeframeTechnical(input: { symbol: string }) {
+  if (!input.symbol) return { error: 'Provide a symbol.' };
+  return getMultiTimeframeContextForSymbol(input.symbol);
+}
+
+async function entryOpportunity(input: { symbol: string }) {
+  if (!input.symbol) return { error: 'Provide a symbol.' };
+  const { entry, opportunity, error } = await getEntryOpportunityForSymbol(input.symbol);
+  if (error) return { error: `Couldn't scan ${entry.symbol}: ${error}` };
+  if (!opportunity) return { error: `No thesis, recommendation, or holding on record for ${entry.symbol} — nothing to base an Entry Opportunity on.` };
+  return { opportunity };
+}
+
 const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   get_portfolio: getPortfolio,
   get_briefing: getBriefing,
@@ -195,6 +217,9 @@ const EXECUTORS: Record<string, (input: any) => Promise<unknown>> = {
   get_todays_focus: todaysFocus,
   get_decision: getDecision,
   scan_watchlist: scanWatchlist,
+  get_symbol_chart_context: symbolChartContext,
+  get_multi_timeframe_technical: multiTimeframeTechnical,
+  get_entry_opportunity: entryOpportunity,
 };
 
 /** The one place a tool name (as chosen by Claude) turns into an actual

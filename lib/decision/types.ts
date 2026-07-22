@@ -1,5 +1,6 @@
 import type { Tone } from '@/lib/theme/tone';
 import type { InsightScores, InsightTier } from '@/lib/intelligence/types';
+import type { TimeframeRoles, TimeframeConflict } from '@/lib/strategy/types';
 
 /**
  * The richer action vocabulary the brief asks for — a strict superset of
@@ -95,4 +96,14 @@ export interface Decision {
   expectedReviewDate: Date | null;
   basedOnRecommendationId: string | null;
   generatedAt: Date;
+  /** The four timeframe roles the brief asks every Decision to be able to
+   * distinguish (long-term thesis / swing setup / entry / invalidation) —
+   * present only when a caller supplied multi-timeframe context (see
+   * lib/strategy/multiTimeframe.ts); absent, not fabricated, otherwise. */
+  timeframeRoles?: TimeframeRoles;
+  /** Any higher-vs-lower timeframe technical disagreements found — a
+   * bullish lower-timeframe read never silently overrides a bearish
+   * higher-timeframe one; see the 'multiTimeframeContext' reasoning
+   * factor and the confidence penalty in lib/decision/engine.ts. */
+  timeframeConflicts?: TimeframeConflict[];
 }

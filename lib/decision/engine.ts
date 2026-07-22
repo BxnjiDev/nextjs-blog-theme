@@ -3,7 +3,7 @@ import { ACTION_LABEL, scoreTone } from '@/lib/theme/tone';
 import { freshnessFromAge } from '@/lib/intelligence/engine';
 import { computePriorityScore, computeTier } from '@/lib/intelligence/scoring';
 import type { Insight, InsightScores } from '@/lib/intelligence/types';
-import type { TechnicalEvidence, DemandZone, LiquidityEvidence } from '@/lib/strategy/types';
+import { LIQUIDITY_CLASSIFICATION_TONE, type TechnicalEvidence, type DemandZone, type LiquidityEvidence, type MultiTimeframeContext } from '@/lib/strategy/types';
 import { DECISION_ACTION_LABEL, DECISION_ACTION_TONE, type Decision, type DecisionAction, type DecisionFactor } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -66,6 +66,12 @@ export interface BuildDecisionInput {
   technicalEvidence?: TechnicalEvidence | null;
   demandZones?: DemandZone[] | null;
   liquidityEvidence?: LiquidityEvidence | null;
+  /** Cross-timeframe technical context (lib/strategy/multiTimeframe.ts) —
+   * same additive contract as the single-timeframe evidence above: adds a
+   * reasoning factor and identifies conflicts, but a lower-timeframe
+   * signal never overrides higher-timeframe structure, and this never
+   * determines the action itself. */
+  multiTimeframe?: MultiTimeframeContext | null;
   now?: Date;
 }
 
@@ -114,6 +120,7 @@ export function buildDecision(input: BuildDecisionInput): Decision {
     technicalEvidence,
     demandZones,
     liquidityEvidence,
+    multiTimeframe,
   } = input;
 
   const overrideReasons: string[] = [];
@@ -210,6 +217,33 @@ export function buildDecision(input: BuildDecisionInput): Decision {
         );
       }
     }
+  }
+
+  // A confirmed sweep-and-reclaim is the only liquidity classification
+  // strong enough to move confidence at all, and only when its direction
+  // agrees with the action and conviction isn't simultaneously weakening
+  // — the same conservative gating as the demand-zone bonus above.
+  const confirmedSweep = liquidityEvidence?.events.find((e) => e.classification === 'confirmed_sweep_reclaim') ?? null;
+  if (confirmedSweep) {
+    const supportsBullish = confirmedSweep.direction === 'sell_side' && BULLISH_ACTIONS.has(action);
+    const supportsBearish = confirmedSweep.direction === 'buy_side' && (action === 'REDUCE' || action === 'EXIT');
+    if ((supportsBullish || supportsBearish) && conviction && conviction.trend !== 'WEAKENING') {
+      confidence += 4;
+      confidenceReasoning.push(`Reinforced by a confirmed liquidity sweep-and-reclaim near $${confirmedSweep.sweptLevel.toFixed(2)} (${confirmedSweep.timeframe}).`);
+    }
+  }
+
+  // Cross-timeframe conflicts (lib/strategy/multiTimeframe.ts) only ever
+  // reduce confidence, never raise it — a bullish lower-timeframe read
+  // agreeing with a bullish higher-timeframe read is just "no conflict,"
+  // not additional independent evidence on top of the single-timeframe
+  // technicalEvidence bonus already applied above. Capped at one penalty
+  // regardless of how many conflicting pairs were found, so three
+  // conflicting timeframe pairs don't compound into an oversized penalty.
+  if (multiTimeframe?.hasConflict) {
+    confidence -= 8;
+    const worst = multiTimeframe.conflicts[0];
+    confidenceReasoning.push(`Conflicting timeframe structure: ${worst.description}`);
   }
 
   if (overrideReasons.length === 0 && confidenceReasoning.length === 0) {
@@ -312,7 +346,7 @@ export function buildDecision(input: BuildDecisionInput): Decision {
           label: 'Supply & demand context',
           available: true,
           tone: 'info',
-          summary: `Revisiting a demand zone near $${nearestRetestedZone.priceLevel.toFixed(2)} (formed ${nearestRetestedZone.formedAt.toLocaleDateString()}, +${nearestRetestedZone.impulseMovePct.toFixed(1)}% impulse move away from it) — a close-price proxy, not true volume-at-price; increases confidence only alongside other supportive evidence, never on its own.`,
+          summary: `Revisiting ${nearestRetestedZone.description} — increases confidence only alongside other supportive evidence, never on its own.`,
         }
       : demandZones && demandZones.length > 0
         ? {
@@ -320,16 +354,51 @@ export function buildDecision(input: BuildDecisionInput): Decision {
             label: 'Supply & demand context',
             available: true,
             tone: 'neutral',
-            summary: `${demandZones.length} historical demand zone${demandZones.length === 1 ? '' : 's'} identified; price is not currently near a retest.`,
+            summary: `${demandZones.length} candidate demand zone${demandZones.length === 1 ? '' : 's'} identified; price is not currently near a retest.`,
           }
         : { key: 'supplyDemandContext', label: 'Supply & demand context', available: false, tone: 'muted', summary: 'No demand zones identified in the available price history.' }
   );
 
   reasoning.push(
-    liquidityEvidence && !liquidityEvidence.available
-      ? { key: 'liquidityAnalysis', label: 'Liquidity analysis', available: false, tone: 'muted', summary: liquidityEvidence.note }
-      : { key: 'liquidityAnalysis', label: 'Liquidity analysis', available: false, tone: 'muted', summary: 'Liquidity-sweep detection requires intraday/order-flow data this app does not currently ingest.' }
+    liquidityEvidence?.available && liquidityEvidence.events.length > 0
+      ? {
+          key: 'liquidityAnalysis',
+          label: 'Liquidity analysis',
+          available: true,
+          tone: LIQUIDITY_CLASSIFICATION_TONE[liquidityEvidence.events[0].classification],
+          summary: liquidityEvidence.events[0].description,
+        }
+      : {
+          key: 'liquidityAnalysis',
+          label: 'Liquidity analysis',
+          available: false,
+          tone: 'muted',
+          summary: liquidityEvidence?.note ?? 'Liquidity-sweep detection requires intraday high/low data this app does not currently ingest.',
+        }
   );
+
+  if (multiTimeframe) {
+    reasoning.push(
+      multiTimeframe.hasConflict
+        ? {
+            key: 'multiTimeframeContext',
+            label: 'Multi-timeframe structure',
+            available: true,
+            tone: 'warning',
+            summary: multiTimeframe.conflicts.map((c) => c.description).join(' '),
+          }
+        : {
+            key: 'multiTimeframeContext',
+            label: 'Multi-timeframe structure',
+            available: multiTimeframe.snapshots.length > 0,
+            tone: multiTimeframe.snapshots.length > 0 ? multiTimeframe.overallTone : 'muted',
+            summary:
+              multiTimeframe.snapshots.length > 0
+                ? `${multiTimeframe.snapshots.map((s) => s.timeframe).join('/')} structure aligned — no cross-timeframe conflict detected (composite: ${multiTimeframe.overallTone}).`
+                : 'No multi-timeframe candle data available.',
+          }
+    );
+  }
 
   reasoning.push(
     recommendation?.catalysts
@@ -465,6 +534,8 @@ export function buildDecision(input: BuildDecisionInput): Decision {
     expectedReviewDate,
     basedOnRecommendationId: recommendation?.id ?? null,
     generatedAt: now,
+    timeframeRoles: multiTimeframe?.roles,
+    timeframeConflicts: multiTimeframe?.conflicts,
   };
 }
 

@@ -1,13 +1,15 @@
 import { prisma } from '@/lib/prisma';
 import { marketDataProvider } from '@/lib/integrations';
-import type { HistoricalPricePoint } from '@/lib/integrations';
 import { getActiveAccountId, getPortfolioOverview, type PortfolioOverview } from './portfolio';
 import { getDecisionForSymbol } from './decision';
+import { getCandlesForSymbol } from './candles';
 import { computeTechnicalEvidence } from '@/lib/strategy/technical';
 import { identifyDemandZones } from '@/lib/strategy/supplyDemand';
+import { detectLiquidityEvidence } from '@/lib/strategy/liquidity';
 import { buildEntryOpportunity, MAGNIFICENT_SEVEN } from '@/lib/strategy/engine';
 import type { EntryOpportunity, OpportunityTier } from '@/lib/strategy/types';
 import type { Decision } from '@/lib/decision/types';
+import { candlesToHistoricalPricePoints, type Interval } from '@/lib/marketdata/types';
 
 /**
  * A small, illustrative Defense/Energy set alongside MAGNIFICENT_SEVEN —
@@ -18,6 +20,13 @@ import type { Decision } from '@/lib/decision/types';
  */
 const DEFENSE_ENERGY_UNIVERSE = ['LMT', 'NOC', 'RTX', 'XOM', 'CVX'];
 const HISTORY_SESSIONS = 60;
+/** Daily candles remain the Market Monitoring Engine's default scan
+ * timeframe — the same cadence this scan has always used, now backed by
+ * real OHLCV via the candle service instead of close+volume only. Symbol
+ * workspaces (the chart, Decision Workspace) let the user pick any of the
+ * five supported intervals; the bulk scan stays on one cheap, consistent
+ * timeframe so a full watchlist pass doesn't multiply provider calls. */
+const DEFAULT_SCAN_INTERVAL: Interval = '1D';
 
 export interface WatchlistEntry {
   symbol: string;
@@ -90,16 +99,25 @@ export interface WatchlistScanEntry {
   error: string | null;
 }
 
-async function scanSymbol(entry: WatchlistEntry, overview: PortfolioOverview | null, benchmarkHistory: HistoricalPricePoint[]): Promise<WatchlistScanEntry> {
+async function scanSymbol(entry: WatchlistEntry, overview: PortfolioOverview | null, benchmarkHistory: { date: Date; close: number; volume: number }[]): Promise<WatchlistScanEntry> {
   try {
-    const history = await marketDataProvider.getHistoricalDaily(entry.symbol, HISTORY_SESSIONS);
-    const technicalEvidence = computeTechnicalEvidence(history, benchmarkHistory);
-    const demandZones = identifyDemandZones(history);
+    const { candles } = await getCandlesForSymbol(entry.symbol, DEFAULT_SCAN_INTERVAL, { limit: HISTORY_SESSIONS });
+    const priceHistory = candlesToHistoricalPricePoints(candles);
+    const technicalEvidence = computeTechnicalEvidence(priceHistory, benchmarkHistory);
+    const demandZones = identifyDemandZones(candles, DEFAULT_SCAN_INTERVAL);
+    const liquidityEvidence = detectLiquidityEvidence(candles, DEFAULT_SCAN_INTERVAL);
 
-    const { decision } = await getDecisionForSymbol(entry.symbol, { portfolioOverview: overview, technicalEvidence, demandZones });
+    const { decision } = await getDecisionForSymbol(entry.symbol, { portfolioOverview: overview, technicalEvidence, demandZones, liquidityEvidence });
     if (!decision) return { entry, opportunity: null, error: null };
 
-    const opportunity = buildEntryOpportunity(decision, entry.name, entry.sector, hasNearCatalyst(decision));
+    const latestCandle = candles[candles.length - 1] ?? null;
+    const opportunity = buildEntryOpportunity(decision, entry.name, entry.sector, hasNearCatalyst(decision), {
+      latestPrice: latestCandle?.close ?? null,
+      priceFreshness: latestCandle?.freshness ?? 'unavailable',
+      priceAsOf: latestCandle?.timestamp ?? null,
+      demandZones,
+      liquidityEvidence,
+    });
     return { entry, opportunity, error: null };
   } catch (err) {
     return { entry, opportunity: null, error: err instanceof Error ? err.message : String(err) };
@@ -139,6 +157,30 @@ export interface MarketMonitoringSnapshot {
  * is no independent scoring path, so a symbol's ranking here always agrees
  * with its own Decision Workspace page.
  */
+/**
+ * Ad-hoc single-symbol version of the same scan getMarketMonitoringSnapshot
+ * runs across the whole watchlist — reuses scanSymbol so a symbol the chat
+ * asks about (whether or not it's already on the watchlist) gets exactly
+ * the same Entry Opportunity framing get_decision/scan_watchlist would show
+ * for it, never a second opportunity-building path. Falls back to a
+ * synthetic universe-sourced WatchlistEntry when the symbol isn't already
+ * held, tracked, or in the curated core.
+ */
+export async function getEntryOpportunityForSymbol(rawSymbol: string): Promise<WatchlistScanEntry> {
+  const symbol = rawSymbol.toUpperCase();
+  const accountId = await getActiveAccountId();
+  const overview = accountId ? await getPortfolioOverview() : null;
+
+  const [watchlist, benchmarkHistory] = await Promise.all([getWatchlistSymbols(overview), marketDataProvider.getSp500History(HISTORY_SESSIONS)]);
+  let entry = watchlist.find((w) => w.symbol === symbol);
+  if (!entry) {
+    const fundamentals = await marketDataProvider.getFundamentals(symbol).catch(() => null);
+    entry = { symbol, name: fundamentals?.name ?? symbol, sector: fundamentals?.sector ?? null, source: 'universe' };
+  }
+
+  return scanSymbol(entry, overview, benchmarkHistory);
+}
+
 export async function getMarketMonitoringSnapshot(): Promise<MarketMonitoringSnapshot> {
   const accountId = await getActiveAccountId();
   const overview = accountId ? await getPortfolioOverview() : null;

@@ -4,6 +4,7 @@
  * through these interfaces, so swapping in a real vendor later is a
  * one-file change, not a rewrite of the pages that consume it.
  */
+import type { Candle, Interval } from '@/lib/marketdata/types';
 
 /** live = true real-time tick, delayed = real vendor data on a delay, mock = placeholder. */
 export type DataQuality = 'live' | 'delayed' | 'mock';
@@ -47,6 +48,12 @@ export interface CompanyFundamentals {
   quality: DataQuality;
 }
 
+export interface CandleOptions {
+  limit?: number;
+  from?: Date;
+  to?: Date;
+}
+
 export interface MarketDataProvider {
   getQuote(symbol: string): Promise<Quote>;
   getQuotes(symbols: string[]): Promise<Quote[]>;
@@ -57,6 +64,16 @@ export interface MarketDataProvider {
   /** Latest S&P 500 level (tracked via the SPY ETF as a proxy). */
   getSp500Level(): Promise<number>;
   getSp500History(days?: number): Promise<HistoricalPricePoint[]>;
+  /**
+   * Canonical OHLCV candles for one of the app's five supported intervals
+   * (lib/marketdata/types.ts's Interval). Every implementation returns
+   * already-normalized, ascending-by-time Candle[] — provider-specific
+   * shape never leaks past this boundary. Where a provider can't serve an
+   * interval natively, the implementation deterministically aggregates it
+   * from a smaller trusted interval (lib/marketdata/aggregate.ts) rather
+   * than failing outright.
+   */
+  getCandles(symbol: string, interval: Interval, options?: CandleOptions): Promise<Candle[]>;
 }
 
 export type MaterialityLevel = 'critical' | 'high' | 'medium' | 'low';

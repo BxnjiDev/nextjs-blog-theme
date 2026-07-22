@@ -129,4 +129,37 @@ export const ATLAS_TOOLS: Anthropic.Tool[] = [
       properties: { limit: { type: 'number', description: 'Max ranked opportunities to return (default 10).' } },
     },
   },
+  {
+    name: 'get_symbol_chart_context',
+    description:
+      "One symbol's candle-backed chart context for a given timeframe: latest price and freshness (live/delayed/end_of_day/cached/stale/unavailable/mock — never presented as more current than it is), how many candles were available, the percent change across the fetched window, and the same demand-zone and liquidity-sweep evidence the interactive chart overlays and the Decision Engine read from lib/domain/candles.ts and lib/strategy — never a separate calculation. Use this when asked something like \"show me the four-hour chart for Amazon,\" \"what's the daily chart look like,\" or \"is price inside the demand zone,\" or to ground any answer that references a specific timeframe's candles.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol.' },
+        interval: { type: 'string', enum: ['30m', '1h', '4h', '1D', '1W'], description: 'Chart timeframe (default 1D).' },
+      },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'get_multi_timeframe_technical',
+    description:
+      "One symbol's technical structure across all five supported timeframes (30m/1h/4h/1D/1W) plus SPY as a benchmark: each timeframe's available technical evidence, demand zones, and liquidity-sweep events; the composite weighted tone; and any conflicts where a shorter timeframe's tone opposes a longer one (which lowers Decision confidence rather than being ignored). Use this for questions like \"what changes on the daily timeframe\" or \"is there a conflict between the weekly and the 30-minute chart\" — this is the same context lib/domain/multiTimeframe.ts supplies to the Decision Engine when multi-timeframe context is requested, not an independent read.",
+    input_schema: {
+      type: 'object',
+      properties: { symbol: { type: 'string', description: 'Ticker symbol.' } },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'get_entry_opportunity',
+    description:
+      "One symbol's full Entry Opportunity — the same structure scan_watchlist returns for watchlist symbols, but for any single symbol on demand, whether or not it's currently held or tracked: strategy classification, latest price and freshness, preferred analytical timeframe, potential entry area (a range, not a precise price, when the evidence supports one), distance to that area, invalidation condition, demand-zone and liquidity-sweep context, trend/volume summary, confidence, why now/why not, expected holding window, and next review trigger — all derived from that symbol's own Decision (the same one get_decision returns), never a second scoring path. Use this for \"why is this an entry,\" \"was that a liquidity sweep,\" or \"what would make me consider buying this.\"",
+    input_schema: {
+      type: 'object',
+      properties: { symbol: { type: 'string', description: 'Ticker symbol.' } },
+      required: ['symbol'],
+    },
+  },
 ];

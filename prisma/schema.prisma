@@ -213,11 +213,11 @@ model Account {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  holdings          Holding[]
-  transactions      Transaction[]
-  openOrders        OpenOrder[]
-  syncLogs          SyncLog[]
-  manualExecutions  ManualExecution[]
+  holdings         Holding[]
+  transactions     Transaction[]
+  openOrders       OpenOrder[]
+  syncLogs         SyncLog[]
+  manualExecutions ManualExecution[]
 }
 
 /// A current position, mirrored from the brokerage account.
@@ -951,24 +951,24 @@ model OpenOrder {
 /// Audit log for every account-sync attempt, successful or not — the
 /// permanent record of "what synced, from where, when, and what happened."
 model SyncLog {
-  id             String    @id @default(cuid())
-  accountId      String?
-  account        Account?  @relation(fields: [accountId], references: [id])
-  source         String // e.g. "cli", "api"
-  schemaVersion  String
-  payloadAsOf    DateTime?
-  success        Boolean
-  recordsAdded   Int       @default(0)
-  recordsUpdated Int       @default(0)
-  recordsSkipped Int       @default(0)
-  errors         Json      @default("[]")
-  warnings       Json      @default("[]")
+  id                    String    @id @default(cuid())
+  accountId             String?
+  account               Account?  @relation(fields: [accountId], references: [id])
+  source                String // e.g. "cli", "api"
+  schemaVersion         String
+  payloadAsOf           DateTime?
+  success               Boolean
+  recordsAdded          Int       @default(0)
+  recordsUpdated        Int       @default(0)
+  recordsSkipped        Int       @default(0)
+  errors                Json      @default("[]")
+  warnings              Json      @default("[]")
   /// Structured field-by-field Atlas-vs-Robinhood comparison (Phase 3.7) —
   /// see lib/domain/accountSync.ts ReconciliationDetail. `warnings` above
   /// stays free-text for backward compatibility; this is the same
   /// comparisons, machine-readable, consumed by scripts/validateFirstSync.ts.
-  reconciliationDetails Json @default("[]")
-  syncedAt       DateTime  @default(now())
+  reconciliationDetails Json      @default("[]")
+  syncedAt              DateTime  @default(now())
 
   @@index([syncedAt])
   @@index([accountId, syncedAt])
@@ -1018,25 +1018,25 @@ model ProviderCallLog {
 /// real synced Transaction using configurable tolerances and records how
 /// well they line up in `matchStatus`.
 model ManualExecution {
-  id               String               @id @default(cuid())
-  accountId        String
-  account          Account              @relation(fields: [accountId], references: [id])
-  symbol           String
-  side             TradeSide
-  executedAt       DateTime
-  quantity         Decimal
-  dollarAmount     Decimal
-  executionPrice   Decimal
-  fees             Decimal              @default(0)
-  note             String?
-  recommendationId String?
-  recommendation   Recommendation?      @relation(fields: [recommendationId], references: [id])
-  matchStatus      ExecutionMatchStatus @default(PENDING)
-  matchedTransactionId String?          @unique
-  matchedTransaction   Transaction?     @relation(fields: [matchedTransactionId], references: [id])
-  reconciledAt     DateTime?
-  reconciliationNote String?
-  recordedAt       DateTime             @default(now())
+  id                   String               @id @default(cuid())
+  accountId            String
+  account              Account              @relation(fields: [accountId], references: [id])
+  symbol               String
+  side                 TradeSide
+  executedAt           DateTime
+  quantity             Decimal
+  dollarAmount         Decimal
+  executionPrice       Decimal
+  fees                 Decimal              @default(0)
+  note                 String?
+  recommendationId     String?
+  recommendation       Recommendation?      @relation(fields: [recommendationId], references: [id])
+  matchStatus          ExecutionMatchStatus @default(PENDING)
+  matchedTransactionId String?              @unique
+  matchedTransaction   Transaction?         @relation(fields: [matchedTransactionId], references: [id])
+  reconciledAt         DateTime?
+  reconciliationNote   String?
+  recordedAt           DateTime             @default(now())
 
   @@index([accountId, symbol])
   @@index([matchStatus])
@@ -1159,4 +1159,69 @@ model ChatMessage {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+/// The five canonical intervals the Live Market Data & Charting Layer
+/// supports today (see lib/marketdata/types.ts). Deliberately a closed enum
+/// rather than a free string so a typo can never silently create a new,
+/// uncached interval bucket — adding a new interval is a migration, exactly
+/// as visible as it should be.
+enum CandleInterval {
+  MIN30
+  HOUR1
+  HOUR4
+  DAY1
+  WEEK1
+}
+
+/// Mirrors lib/marketdata/types.ts's FreshnessStatus — how trustworthy/
+/// current this candle was when stored. A cached completed candle keeps
+/// whatever freshness it was fetched with; only the in-progress candle for
+/// "now" is ever re-fetched and overwritten.
+enum CandleFreshness {
+  LIVE
+  DELAYED
+  END_OF_DAY
+  CACHED
+  STALE
+  UNAVAILABLE
+}
+
+enum MarketSessionType {
+  REGULAR
+  PRE_MARKET
+  AFTER_HOURS
+  CLOSED
+}
+
+/// The shared OHLCV cache every surface (charts, technical evidence,
+/// supply/demand, liquidity, monitoring, alerts, Atlas Chat) reads through
+/// via lib/domain/candles.ts — never re-fetched from the provider once a
+/// candle is complete. `isActive` marks the current in-progress candle for
+/// an interval (there is at most one per symbol+interval at a time), which
+/// is always treated as mutable and safe to overwrite in place; every other
+/// row is immutable once written. `timestamp` is the candle's OPEN time in
+/// UTC (the exchange-local session context is derived, not stored per row,
+/// from lib/marketdata/sessions.ts to avoid drift between the two).
+model PriceCandle {
+  id              String            @id @default(cuid())
+  symbol          String
+  interval        CandleInterval
+  timestamp       DateTime
+  open            Decimal
+  high            Decimal
+  low             Decimal
+  close           Decimal
+  volume          BigInt
+  sessionType     MarketSessionType @default(REGULAR)
+  provider        String
+  receivedAt      DateTime          @default(now())
+  freshness       CandleFreshness
+  adjusted        Boolean           @default(false)
+  splitAdjustment Json?
+  isActive        Boolean           @default(false)
+
+  @@unique([symbol, interval, timestamp])
+  @@index([symbol, interval, timestamp])
+  @@index([symbol, interval, isActive])
 }

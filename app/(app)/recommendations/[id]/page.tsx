@@ -10,6 +10,7 @@ import InsightCard from '@/components/intelligence/InsightCard';
 import SectionHeading from '@/components/ui/SectionHeading';
 import Panel from '@/components/ui/Panel';
 import FadeInView from '@/components/motion/FadeInView';
+import CompactPriceChart from '@/components/chart/CompactPriceChart';
 import { getDataFreshnessSnapshot } from '@/lib/domain/dataFreshness';
 import { normalizeExplainability, normalizeDataQualityChecks } from '@/lib/domain/legacyNormalization';
 import { getDecisionForSymbol } from '@/lib/domain/decision';
@@ -94,6 +95,10 @@ export default async function InvestmentMemoPage({ params }: { params: { id: str
         </div>
 
         <p className="mt-3 text-xs text-atlas-text-tertiary">Generated {recommendation.generatedAt.toLocaleString()}</p>
+
+        <div className="mt-3 max-w-xs">
+          <CompactPriceChart symbol={recommendation.symbol} interval="1D" height={56} />
+        </div>
 
         <div className="mt-4">
           <DecisionPanel recommendationId={recommendation.id} currentDecision={recommendation.userDecision} />

@@ -9,7 +9,9 @@ import type { Decision, DecisionHistoryEntry } from '@/lib/decision/types';
 import { computeTechnicalEvidence } from '@/lib/strategy/technical';
 import { identifyDemandZones } from '@/lib/strategy/supplyDemand';
 import { detectLiquidityEvidence } from '@/lib/strategy/liquidity';
-import type { TechnicalEvidence, DemandZone } from '@/lib/strategy/types';
+import type { TechnicalEvidence, DemandZone, LiquidityEvidence, MultiTimeframeContext } from '@/lib/strategy/types';
+import { getCandlesForSymbol } from './candles';
+import { candlesToHistoricalPricePoints } from '@/lib/marketdata/types';
 
 export interface RelatedPosition {
   symbol: string;
@@ -21,6 +23,13 @@ export interface SymbolDecisionResult {
   decision: Decision | null;
   history: DecisionHistoryEntry[];
   relatedPositions: RelatedPosition[];
+  /** The structured demand-zone/liquidity evidence that fed this Decision
+   * — exposed alongside it (not just baked into decision.reasoning text)
+   * so a chart can render the same zones/sweeps the Decision itself cites,
+   * without a second computation. Empty/unavailable when the symbol
+   * couldn't be resolved to a decision at all. */
+  demandZones: DemandZone[];
+  liquidityEvidence: LiquidityEvidence | null;
 }
 
 const NOT_YET_ASSESSED = 'Not yet assessed.';
@@ -42,6 +51,15 @@ const NOT_YET_ASSESSED = 'Not yet assessed.';
  * the caller (the Market Monitoring service, scanning many watchlist
  * symbols in one pass) has already fetched this symbol's price history —
  * this avoids a duplicate history fetch per symbol during a bulk scan.
+ *
+ * `multiTimeframe` is always caller-supplied, never computed internally
+ * here — building it costs five extra candle fetches (one per supported
+ * interval), which is fine for the one symbol a user has open in the
+ * Decision Workspace but far too expensive to run on every
+ * getDecisionForSymbol call across Home/compare/chat/bulk-scan. Pass it
+ * (via lib/domain/multiTimeframe.ts's getMultiTimeframeContextForSymbol)
+ * only from a surface that actually needs cross-timeframe conflict
+ * detection.
  */
 export async function getDecisionForSymbol(
   rawSymbol: string,
@@ -49,15 +67,17 @@ export async function getDecisionForSymbol(
     portfolioOverview?: PortfolioOverview | null;
     technicalEvidence?: TechnicalEvidence | null;
     demandZones?: DemandZone[] | null;
+    liquidityEvidence?: LiquidityEvidence | null;
+    multiTimeframe?: MultiTimeframeContext | null;
   }
 ): Promise<SymbolDecisionResult> {
   const symbol = rawSymbol.toUpperCase();
   const accountId = await getActiveAccountId();
-  if (!accountId) return { decision: null, history: [], relatedPositions: [] };
+  if (!accountId) return { decision: null, history: [], relatedPositions: [], demandZones: [], liquidityEvidence: null };
 
-  const needsHistory = !(options && ('technicalEvidence' in options || 'demandZones' in options));
+  const needsHistory = !(options && ('technicalEvidence' in options || 'demandZones' in options || 'liquidityEvidence' in options));
 
-  const [overview, intelligenceRows, holding, latestConvictionRow, changeEvents, nextEarnings, portfolioRiskRow, priceHistory, benchmarkHistory] = await Promise.all([
+  const [overview, intelligenceRows, holding, latestConvictionRow, changeEvents, nextEarnings, portfolioRiskRow, dailyCandlesResponse, benchmarkHistory] = await Promise.all([
     options && 'portfolioOverview' in options ? Promise.resolve(options.portfolioOverview ?? null) : getPortfolioOverview(),
     getPortfolioIntelligence({ symbol }),
     prisma.holding.findFirst({
@@ -68,20 +88,22 @@ export async function getDecisionForSymbol(
     prisma.thesisChangeEvent.findMany({ where: { symbol }, orderBy: { createdAt: 'desc' } }),
     prisma.earningsEvent.findFirst({ where: { symbol, isEstimate: true, reportDate: { gte: new Date() } }, orderBy: { reportDate: 'asc' } }),
     prisma.riskAssessment.findFirst({ orderBy: { generatedAt: 'desc' } }),
-    needsHistory ? marketDataProvider.getHistoricalDaily(symbol, 60) : Promise.resolve([]),
+    needsHistory ? getCandlesForSymbol(symbol, '1D', { limit: 60 }) : Promise.resolve(null),
     needsHistory ? marketDataProvider.getSp500History(60) : Promise.resolve([]),
   ]);
 
+  const dailyCandles = dailyCandlesResponse?.candles ?? [];
+  const priceHistory = candlesToHistoricalPricePoints(dailyCandles);
   const technicalEvidence = options && 'technicalEvidence' in options ? (options.technicalEvidence ?? null) : computeTechnicalEvidence(priceHistory, benchmarkHistory);
-  const demandZones = options && 'demandZones' in options ? (options.demandZones ?? null) : identifyDemandZones(priceHistory);
-  const liquidityEvidence = detectLiquidityEvidence();
+  const demandZones = options && 'demandZones' in options ? (options.demandZones ?? null) : identifyDemandZones(dailyCandles, '1D');
+  const liquidityEvidence = options && 'liquidityEvidence' in options ? (options.liquidityEvidence ?? null) : detectLiquidityEvidence(dailyCandles, '1D');
 
   const summary = intelligenceRows[0] ?? null;
   const recommendations = holding?.recommendations ?? [];
   const latestRecommendation = recommendations[0] ?? null;
 
   if (!holding && !summary && recommendations.length === 0) {
-    return { decision: null, history: [], relatedPositions: [] };
+    return { decision: null, history: [], relatedPositions: [], demandZones: [], liquidityEvidence: null };
   }
 
   const holdingView = overview?.holdings.find((h) => h.symbol === symbol) ?? null;
@@ -139,6 +161,7 @@ export async function getDecisionForSymbol(
     technicalEvidence,
     demandZones,
     liquidityEvidence,
+    multiTimeframe: options?.multiTimeframe ?? null,
   };
 
   const decision = buildDecision(decisionInput);
@@ -162,5 +185,5 @@ export async function getDecisionForSymbol(
         .sort((a, b) => b.weightPct - a.weightPct)
     : [];
 
-  return { decision, history, relatedPositions };
+  return { decision, history, relatedPositions, demandZones: demandZones ?? [], liquidityEvidence: liquidityEvidence ?? null };
 }

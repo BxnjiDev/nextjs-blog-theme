@@ -4,8 +4,14 @@ import type {
   Technicals,
   HistoricalPricePoint,
   CompanyFundamentals,
+  CandleOptions,
 } from './types';
 import { timedProviderCall } from './retry';
+import type { Candle, Interval } from '@/lib/marketdata/types';
+import { DEFAULT_LOOKBACK, PROVIDER_INTERVAL } from '@/lib/marketdata/types';
+import { normalizeCandles } from '@/lib/marketdata/normalize';
+import { aggregateCandles } from '@/lib/marketdata/aggregate';
+import { classifySessionType, EXCHANGE_TIMEZONE } from '@/lib/marketdata/sessions';
 
 const TWELVE_DATA_BASE = 'https://api.twelvedata.com';
 
@@ -87,7 +93,64 @@ class MockMarketDataProvider implements MarketDataProvider {
   async getSp500History(days = 30): Promise<HistoricalPricePoint[]> {
     return this.getHistoricalDaily('SPY', days);
   }
+
+  /**
+   * Deterministic mock OHLCV — a fixed step-per-bar (not session-aware;
+   * that nuance only matters for real aggregation, tested directly against
+   * lib/marketdata/aggregate.ts) so local development always has enough
+   * synthetic history to exercise every chart/technical/demand-zone code
+   * path without a real API key. Every candle is tagged `freshness:
+   * 'mock'` — never cached (see lib/domain/candles.ts) and never
+   * confusable with real data.
+   */
+  async getCandles(symbol: string, interval: Interval, options?: CandleOptions): Promise<Candle[]> {
+    const limit = options?.limit ?? DEFAULT_LOOKBACK[interval];
+    const seed = hashSymbol(symbol);
+    const base = 50 + (seed % 400);
+    const stepMs = MOCK_STEP_MS[interval];
+    const now = Date.now();
+
+    const candles: Candle[] = [];
+    for (let i = limit - 1; i >= 0; i--) {
+      const t = i;
+      const wobble = Math.sin((seed + t) / 5) * (base * 0.02);
+      const close = Math.max(1, base + wobble);
+      const open = Math.max(1, base + Math.sin((seed + t + 1) / 5) * (base * 0.02));
+      const high = Math.max(open, close) + Math.abs(Math.sin(seed + t)) * (base * 0.006);
+      const low = Math.max(0.5, Math.min(open, close) - Math.abs(Math.cos(seed + t)) * (base * 0.006));
+      const volume = 1_000_000 + ((seed + t) % 500_000);
+      const timestamp = new Date(now - i * stepMs);
+
+      candles.push({
+        symbol: symbol.toUpperCase(),
+        interval,
+        timestamp,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        exchangeTimezone: EXCHANGE_TIMEZONE,
+        sessionType: classifySessionType(timestamp),
+        provider: 'mock',
+        receivedAt: new Date(),
+        freshness: 'mock',
+        adjusted: false,
+        splitAdjustment: null,
+        isActive: i === 0,
+      });
+    }
+    return candles;
+  }
 }
+
+const MOCK_STEP_MS: Record<Interval, number> = {
+  '30m': 30 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '4h': 4 * 60 * 60 * 1000,
+  '1D': 24 * 60 * 60 * 1000,
+  '1W': 7 * 24 * 60 * 60 * 1000,
+};
 
 function numberOrNull(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -228,6 +291,46 @@ class TwelveDataProvider implements MarketDataProvider {
   async getSp500History(days = 30): Promise<HistoricalPricePoint[]> {
     return this.getHistoricalDaily('SPY', days);
   }
+
+  private async fetchNativeCandles(symbol: string, interval: Interval, limit: number): Promise<Candle[]> {
+    const data = await this.request<{ values?: Record<string, unknown>[] }>('/time_series', {
+      symbol,
+      interval: PROVIDER_INTERVAL[interval],
+      outputsize: String(limit),
+    });
+    return normalizeCandles(data.values ?? [], { symbol, interval, provider: 'twelvedata', freshness: 'delayed' });
+  }
+
+  /**
+   * Twelve Data's /time_series supports all five of this app's canonical
+   * intervals (30min/1h/4h/1day/1week) directly, so the native fetch is
+   * always tried first. If a plan restriction or transient error makes the
+   * native 4h or 1W fetch fail, this deterministically aggregates from a
+   * smaller trusted interval (1h -> 4h, 1D -> 1W) instead of failing
+   * outright — see lib/marketdata/aggregate.ts for the session-aware
+   * aggregation itself. Any other interval's native failure propagates
+   * (there's no smaller trusted interval to fall back to for 30m/1h/1D
+   * here — that's what FallbackMarketDataProvider's mock safety net is
+   * for, one layer up).
+   */
+  async getCandles(symbol: string, interval: Interval, options?: CandleOptions): Promise<Candle[]> {
+    const limit = options?.limit ?? DEFAULT_LOOKBACK[interval];
+    try {
+      return await this.fetchNativeCandles(symbol, interval, limit);
+    } catch (err) {
+      if (interval === '4h') {
+        console.error(`Twelve Data native 4h fetch failed for ${symbol}; aggregating from 1h instead:`, err);
+        const hourly = await this.fetchNativeCandles(symbol, '1h', limit * 4);
+        return aggregateCandles(hourly, '4h').slice(-limit);
+      }
+      if (interval === '1W') {
+        console.error(`Twelve Data native 1W fetch failed for ${symbol}; aggregating from 1D instead:`, err);
+        const daily = await this.fetchNativeCandles(symbol, '1D', limit * 7);
+        return aggregateCandles(daily, '1W').slice(-limit);
+      }
+      throw err;
+    }
+  }
 }
 
 /**
@@ -294,6 +397,13 @@ class FallbackMarketDataProvider implements MarketDataProvider {
       'getSp500History',
       () => this.real.getSp500History(days),
       () => this.mock.getSp500History(days)
+    );
+  }
+  getCandles(symbol: string, interval: Interval, options?: CandleOptions) {
+    return this.attempt(
+      `getCandles:${interval}`,
+      () => this.real.getCandles(symbol, interval, options),
+      () => this.mock.getCandles(symbol, interval, options)
     );
   }
 }

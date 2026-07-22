@@ -10,10 +10,12 @@ import ConvictionScrubber from '@/components/intelligence/ConvictionScrubber';
 import InsightCard from '@/components/intelligence/InsightCard';
 import DecisionFactorGrid from '@/components/decision/DecisionFactorGrid';
 import RelatedPositionsList from '@/components/decision/RelatedPositionsList';
+import DecisionChartPanel from '@/components/decision/DecisionChartPanel';
 import EmptyState from '@/components/ui/EmptyState';
 import { getActiveAccountId } from '@/lib/domain/portfolio';
 import { getDecisionForSymbol } from '@/lib/domain/decision';
 import { decisionToInsight } from '@/lib/decision/engine';
+import { buildPriceBands, buildMarkers } from '@/components/chart/buildAnnotations';
 import FadeInView from '@/components/motion/FadeInView';
 
 interface ExplainabilityShape {
@@ -86,7 +88,7 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
   // lib/domain/decision.ts) — the same function Home, /recommendations,
   // /compare, and the Atlas Chat tool layer call, so this page's verdict
   // can never conflict with what any other surface says about this symbol.
-  const [recentFundamentals, { decision, history, relatedPositions }] = await Promise.all([
+  const [recentFundamentals, { decision, history, relatedPositions, demandZones, liquidityEvidence }] = await Promise.all([
     prisma.fundamentalSnapshot.findMany({
       where: { symbol: holding.symbol, periodType: 'QUARTERLY' },
       orderBy: { reportDate: 'desc' },
@@ -94,6 +96,9 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
     }),
     getDecisionForSymbol(symbol),
   ]);
+
+  const priceBands = decision ? buildPriceBands({ demandZones, symbol }) : [];
+  const chartMarkers = decision ? buildMarkers({ liquidityEvidence }) : [];
 
   return (
     <div className="space-y-8">
@@ -119,6 +124,9 @@ export default async function ThesisDetailPage({ params }: { params: { symbol: s
           <Panel variant="flat">
             <InsightCard insight={decisionToInsight(decision)} />
           </Panel>
+          <div className="mt-4">
+            <DecisionChartPanel symbol={symbol} defaultInterval="1D" priceBands={priceBands} markers={chartMarkers} />
+          </div>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_260px]">
             <DecisionFactorGrid factors={decision.reasoning} />
             <div className="rounded-lg border border-atlas-border-subtle bg-atlas-surface-raised p-3">

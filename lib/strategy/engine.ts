@@ -1,5 +1,6 @@
 import type { Decision, DecisionAction } from '@/lib/decision/types';
-import type { EntryOpportunity, OpportunityTier, StrategyType } from './types';
+import type { FreshnessStatus, Interval } from '@/lib/marketdata/types';
+import type { DemandZone, EntryOpportunity, EntryOpportunityArea, LiquidityEvidence, OpportunityTier, StrategyType } from './types';
 
 /**
  * The brief's explicit long-term focus universe. Membership here only
@@ -88,20 +89,76 @@ const PROFIT_GUIDANCE: Record<StrategyType, string> = {
   NO_ACTION: 'Not applicable.',
 };
 
+/** Which timeframe a chart should open on by default for each strategy
+ * type — long-term calls default to the higher timeframe that actually
+ * matches how long they're meant to be held; swing/tactical calls default
+ * to the setup timeframe the brief's multi-timeframe framework assigns. */
+const PREFERRED_TIMEFRAME: Record<StrategyType, Interval> = {
+  LONG_TERM_CORE: '1W',
+  LONG_TERM_GROWTH: '1D',
+  EVENT_DRIVEN_SWING: '4h',
+  TACTICAL_SWING: '4h',
+  RISK_REDUCTION: '1D',
+  REBALANCE: '1D',
+  WATCH_ONLY: '1D',
+  NO_ACTION: '1D',
+};
+
+const BULLISH_ENTRY_ACTIONS = new Set<DecisionAction>(['INCREASE', 'INITIATE']);
+
+/** Optional live-market context — omit entirely for a caller that hasn't
+ * fetched candles/quotes for this symbol; every field degrades to
+ * null/unavailable rather than fabricating a price or zone. */
+export interface EntryOpportunityMarketContext {
+  latestPrice: number | null;
+  priceFreshness: FreshnessStatus;
+  priceAsOf: Date | null;
+  demandZones: DemandZone[];
+  liquidityEvidence: LiquidityEvidence | null;
+}
+
+function buildNextReviewTrigger(decision: Decision): string {
+  const earnings = decision.reasoning.find((f) => f.key === 'earningsTiming');
+  if (earnings?.available && earnings.tone === 'warning') return earnings.summary;
+  if (decision.expectedReviewDate) return `Scheduled review by ${decision.expectedReviewDate.toLocaleDateString()}.`;
+  return "Reassessed at Atlas's next scheduled watchlist scan.";
+}
+
 /**
  * Builds an Entry Opportunity entirely from an existing Decision — no
  * action, confidence, evidence, risk, or invalidation condition is
  * recomputed here; this only adds the strategy-classification framing
  * (strategyType/tradeIntent/expectedHoldingWindow/profitManagementGuidance)
- * the brief's opportunity-list view needs on top of what buildDecision()
- * already produced. Returns null only for NO_ACTION, where there is
- * nothing to frame as an opportunity at all.
+ * plus, when `market` is supplied, live-price/entry-area/demand-zone/
+ * liquidity context — reframed from the same evidence the Decision
+ * already carries, never independently recomputed. Returns null only for
+ * NO_ACTION, where there is nothing to frame as an opportunity at all.
  */
-export function buildEntryOpportunity(decision: Decision, company: string, sector: string | null, hasNearCatalyst: boolean): EntryOpportunity | null {
+export function buildEntryOpportunity(
+  decision: Decision,
+  company: string,
+  sector: string | null,
+  hasNearCatalyst: boolean,
+  market?: EntryOpportunityMarketContext
+): EntryOpportunity | null {
   if (decision.action === 'NO_ACTION') return null;
 
   const strategyType = classifyStrategyType(decision, sector, hasNearCatalyst);
   const tier = classifyOpportunityTier(decision);
+
+  const demandZoneContext = market?.demandZones[0] ?? null;
+  const liquidityContext = market?.liquidityEvidence?.events[0] ?? null;
+  const latestPrice = market?.latestPrice ?? null;
+
+  const potentialEntryArea: EntryOpportunityArea | null =
+    BULLISH_ENTRY_ACTIONS.has(decision.action) && demandZoneContext ? { low: demandZoneContext.priceLevel, high: demandZoneContext.priceHigh } : null;
+
+  let distanceToEntryPct: number | null = null;
+  if (potentialEntryArea && latestPrice !== null) {
+    if (latestPrice > potentialEntryArea.high) distanceToEntryPct = ((latestPrice - potentialEntryArea.high) / potentialEntryArea.high) * 100;
+    else if (latestPrice < potentialEntryArea.low) distanceToEntryPct = ((latestPrice - potentialEntryArea.low) / potentialEntryArea.low) * 100;
+    else distanceToEntryPct = 0;
+  }
 
   return {
     symbol: decision.symbol,
@@ -121,6 +178,19 @@ export function buildEntryOpportunity(decision: Decision, company: string, secto
     invalidationConditions: decision.invalidationConditions,
     profitManagementGuidance: PROFIT_GUIDANCE[strategyType],
     tier,
+    price: {
+      latestPrice,
+      freshness: market?.priceFreshness ?? 'unavailable',
+      asOf: market?.priceAsOf ?? null,
+    },
+    preferredTimeframe: PREFERRED_TIMEFRAME[strategyType],
+    potentialEntryArea,
+    distanceToEntryPct,
+    demandZoneContext,
+    liquidityContext,
+    trendStructureSummary: decision.reasoning.find((f) => f.key === 'trendStructure' && f.available)?.summary ?? null,
+    volumeContextSummary: decision.reasoning.find((f) => f.key === 'volumeConfirmation' && f.available)?.summary ?? null,
+    nextReviewTrigger: buildNextReviewTrigger(decision),
     decision,
   };
 }

@@ -1,6 +1,9 @@
+import Link from 'next/link';
 import Badge from '@/components/ui/Badge';
 import Meter from '@/components/ui/Meter';
 import InsightCard from '@/components/intelligence/InsightCard';
+import CompactPriceChart from '@/components/chart/CompactPriceChart';
+import ChartStatusBadge from '@/components/chart/ChartStatusBadge';
 import { decisionToInsight } from '@/lib/decision/engine';
 import { STRATEGY_TYPE_LABEL, STRATEGY_TYPE_TONE, OPPORTUNITY_TIER_LABEL, OPPORTUNITY_TIER_TONE, type EntryOpportunity } from '@/lib/strategy/types';
 
@@ -24,8 +27,11 @@ export default function EntryOpportunityCard({ opportunity }: { opportunity: Ent
         <Badge tone={STRATEGY_TYPE_TONE[opportunity.strategyType]} variant="outline">
           {STRATEGY_TYPE_LABEL[opportunity.strategyType]}
         </Badge>
-        <span className="font-mono text-xs text-atlas-text-tertiary">{opportunity.symbol}</span>
+        <Link href={`/intelligence/${opportunity.symbol}`} className="font-mono text-xs text-atlas-accent-bright hover:underline">
+          {opportunity.symbol}
+        </Link>
         <span className="text-xs text-atlas-text-tertiary">{opportunity.company}</span>
+        <ChartStatusBadge freshness={opportunity.price.freshness} asOf={opportunity.price.asOf} />
       </div>
 
       <p className="mt-2 text-sm font-medium text-atlas-text">{opportunity.tradeIntent}</p>
@@ -40,8 +46,18 @@ export default function EntryOpportunityCard({ opportunity }: { opportunity: Ent
             <span className="font-medium text-atlas-text-tertiary">Why not: </span>
             {opportunity.whyNot}
           </p>
+          {opportunity.potentialEntryArea && (
+            <p>
+              <span className="font-medium text-atlas-text-tertiary">Potential entry area: </span>${opportunity.potentialEntryArea.low.toFixed(2)}–$
+              {opportunity.potentialEntryArea.high.toFixed(2)}
+              {opportunity.distanceToEntryPct !== null && ` (${opportunity.distanceToEntryPct >= 0 ? '+' : ''}${opportunity.distanceToEntryPct.toFixed(1)}% away)`}
+            </p>
+          )}
         </div>
-        <Meter label="Confidence" score={opportunity.confidence} />
+        <div className="space-y-2">
+          <Meter label="Confidence" score={opportunity.confidence} />
+          <CompactPriceChart symbol={opportunity.symbol} interval={opportunity.preferredTimeframe} height={48} />
+        </div>
       </div>
 
       <div className="mt-3 grid gap-x-4 gap-y-1 text-xs text-atlas-text-tertiary sm:grid-cols-2">
